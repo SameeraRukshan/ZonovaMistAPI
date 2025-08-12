@@ -137,3 +137,9 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# IntelliJ / Android Studio
+.idea/
+*.iml
+*.ipr
+*.iws
