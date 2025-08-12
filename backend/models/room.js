@@ -7,11 +7,9 @@ const roomSchema = new mongoose.Schema({
   bedCount: Number,
   maxOccupancy: Number,
   pricePerNight: Number,
-  status: { type: String, enum: ['available', 'occupied', 'maintenance'], default: 'available' },
+  status: { type: String, enum: ['available', 'occupied', 'maintenance'] },
   amenities: [String],
   photos: [String],
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Room', roomSchema);
