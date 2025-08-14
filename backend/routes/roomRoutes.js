@@ -26,4 +26,30 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
+// POST create a new room
+router.post('/', async (req, res) => {
+  try {
+    const { roomNumber, floor, type, bedCount, maxOccupancy, pricePerNight, status, amenities } = req.body;
+
+    const room = new Room({
+      roomNumber,
+      floor,
+      type,
+      bedCount,
+      maxOccupancy,
+      pricePerNight,
+      status,
+      amenities,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+
+    const newRoom = await room.save();
+    res.status(201).json(newRoom);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+});
+
+
 module.exports = router;
