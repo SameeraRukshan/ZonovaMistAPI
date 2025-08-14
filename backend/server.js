@@ -21,6 +21,10 @@ app.use('/api/auth', authRoutes);
 const roomsRoutes = require('./routes/roomRoutes');
 app.use('/api/rooms', roomsRoutes);
 
+const bookingRoutes = require('./routes/bookingRoutes');
+app.use('/api/bookings', bookingRoutes);
+
+
 app.listen(PORT,'0.0.0.0', () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
 });
