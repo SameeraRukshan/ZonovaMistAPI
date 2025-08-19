@@ -12,9 +12,9 @@ const bookingSchema = new Schema({
   adult_count: { type: Number, required: true }, // Assuming 'adult_count' was intended
   child_count: { type: Number, required: true },
   guest_address: { type: String, required: true },
-  total_price: { type: Decimal128, default: '0' }, // Corrected usage
+  total_price: { type: Decimal128, default: '0' }, 
   special_notes: { type: String, default: '' },
-  advance_amount: { type: Decimal128, default: '0' }, // Corrected usage
+  advance_amount: { type: Decimal128, default: '0' }, 
   status: { type: String, default: 'Pending' },
 }, { timestamps: true });
 
