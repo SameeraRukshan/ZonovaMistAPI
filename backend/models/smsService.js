@@ -3,7 +3,7 @@ const axios = require('axios');
 async function sendBookingSMS(clientPhone, clientName, roomNo, checkInDate) {
   const userId = process.env.USER_ID;
   const apiKey = process.env.API_KEY;
-  const senderId = "NotifyDEMO";
+  const senderId = "Zonova Mist";
   const message = `Hello ${clientName}, your booking for room ${roomNo} is confirmed for ${checkInDate.toDateString()}.`;
 
   // Use URLSearchParams for x-www-form-urlencoded
