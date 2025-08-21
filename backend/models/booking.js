@@ -9,13 +9,15 @@ const bookingSchema = new Schema({
   checkin_date: { type: Date, required: true },
   checkout_date: { type: Date, required: true },
   phone_no: { type: String, required: true },
-  adult_count: { type: Number, required: true }, // Assuming 'adult_count' was intended
+  adult_count: { type: Number, required: true }, 
   child_count: { type: Number, required: true },
   guest_address: { type: String, required: true },
   total_price: { type: Decimal128, default: '0' }, 
   special_notes: { type: String, default: '' },
   advance_amount: { type: Decimal128, default: '0' }, 
   status: { type: String, default: 'Pending' },
+  reminder_sms_sent: { type: Boolean, default: false },
+  reminderSmsSentAt: { type: Date, default: null },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Booking', bookingSchema);
