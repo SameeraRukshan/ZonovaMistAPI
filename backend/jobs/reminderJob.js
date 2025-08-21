@@ -16,7 +16,7 @@ cron.schedule('0 8 * * *', async () => {   // change to '0 8 * * *' for real use
  * │ │ │ │ ┌───────────── day of week (0 - 7) (Sunday = 0 or 7)
  * │ │ │ │ │
  * │ │ │ │ │
- * * * * * *  <- example: runs every minute
+ * * * * * *
  */
 
   console.log("⏰ Running daily reminder job...");
