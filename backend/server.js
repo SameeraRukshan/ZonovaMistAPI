@@ -5,6 +5,7 @@ const connectDB = require('./config/db');
 const cron = require('node-cron');
 const Booking = require('./models/booking'); 
 const { sendReminderSMS } = require('./models/smsService');
+const settingsRoutes = require('./routes/settingsRoutes');
 
 dotenv.config();
 connectDB();
@@ -25,9 +26,10 @@ app.use('/api/bookings', require('./routes/bookingRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/profile', require('./routes/profileRoutes'));
 app.use('/api/images', require('./routes/imageRoutes'));
+app.use('/api/settings', settingsRoutes);
 
 // 🚀 Cron Job: Every day at 8 AM
-cron.schedule('* * * * *', async () => {
+cron.schedule('0 8 * * *', async () => {
   console.log('⏰ Running daily check-in reminder job...');
 
   const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
