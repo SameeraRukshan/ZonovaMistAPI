@@ -30,6 +30,59 @@ const upload = multer({ storage: storage });
 // @route   POST /api/images/upload
 // @desc    Upload multiple images for a specific room
 // @access  Public
+
+/**
+ * @swagger
+ * /images/upload:
+ *   post:
+ *     summary: Upload multiple images for a specific room
+ *     tags: [Rooms]
+ *     description: |
+ *       Uploads up to 10 images for a given room. The room ID must be provided in the request body.
+ *       The images are stored on the server and their URLs are saved in the room document.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - roomId
+ *               - photos
+ *             properties:
+ *               roomId:
+ *                 type: string
+ *                 description: MongoDB ID of the room
+ *                 example: 64a1234b56c7890d1234ef56
+ *               photos:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: binary
+ *                 description: Images to upload (max 10)
+ *     responses:
+ *       200:
+ *         description: Images uploaded successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Images uploaded successfully"
+ *                 photoUrls:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                     example: "/uploads/64a1234b56c7890d1234ef56_1690000000000.jpg"
+ *       400:
+ *         description: Bad request (missing roomId or files, invalid Room ID)
+ *       404:
+ *         description: Room not found
+ *       500:
+ *         description: Server error
+ */
 router.post('/upload', upload.array('photos', 10), async (req, res) => { // 'photos' is the field name, 10 is the max count
   try {
     const roomId = req.body.roomId;

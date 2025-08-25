@@ -1,6 +1,7 @@
 // controllers/settingsController.js
 const Settings = require('../models/settings');
 
+
 exports.getSettings = async (req, res) => {
   try {
     const settings = await Settings.findOne();
@@ -9,6 +10,7 @@ exports.getSettings = async (req, res) => {
     res.status(500).json({ message: 'Error fetching settings', error: err });
   }
 };
+
 
 exports.updateSettings = async (req, res) => {
   try {

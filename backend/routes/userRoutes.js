@@ -6,6 +6,40 @@ const jwt = require('jsonwebtoken');
 const authMiddleware = require('../middleware/authMiddleware');
 
 // SIGNUP
+/**
+ * @swagger
+ * /signup:
+ *   post:
+ *     summary: Register a new user
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - fullName
+ *               - email
+ *               - password
+ *             properties:
+ *               fullName:
+ *                 type: string
+ *                 example: Shan Wijesooriya
+ *               email:
+ *                 type: string
+ *                 example: shan@example.com
+ *               password:
+ *                 type: string
+ *                 example: strongPassword123
+ *     responses:
+ *       201:
+ *         description: User created successfully
+ *       400:
+ *         description: Email already exists
+ *       500:
+ *         description: Server error
+ */
 router.post('/signup', async (req, res) => {
   const { fullName, email, password } = req.body;
   try {
@@ -30,6 +64,59 @@ router.post('/signup', async (req, res) => {
 });
 
 // LOGIN
+/**
+ * @swagger
+ * /login:
+ *   post:
+ *     summary: Log in a user
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 example: shan@example.com
+ *               password:
+ *                 type: string
+ *                 example: strongPassword123
+ *     responses:
+ *       200:
+ *         description: Login successful, returns JWT token and user info
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 token:
+ *                   type: string
+ *                   example: eyJhbGciOiJIUzI1NiIsInR5cCI6...
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                       example: 60a6cbbf5d3b9a2d5c8b4567
+ *                     fullName:
+ *                       type: string
+ *                       example: Shan Wijesooriya
+ *                     email:
+ *                       type: string
+ *                       example: shan@example.com
+ *                     createdAt:
+ *                       type: string
+ *                       format: date-time
+ *       400:
+ *         description: Invalid credentials
+ *       500:
+ *         description: Server error
+ */
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
   try {
