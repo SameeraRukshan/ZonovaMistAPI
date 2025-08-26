@@ -1,7 +1,6 @@
-// models/Settings.js
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
-const settingsSchema = new mongoose.Schema({
+const SettingsSchema = new mongoose.Schema({
   guestHouseName: { type: String, required: true },
   guestHouseAddress: { type: String, required: true },
   hostName: { type: String, required: true },
@@ -10,4 +9,4 @@ const settingsSchema = new mongoose.Schema({
   todayBookingSmsTemplate: { type: String, required: true },
 }, { timestamps: true });
 
-module.exports = mongoose.model('Settings', settingsSchema);
+module.exports = mongoose.model("Settings", SettingsSchema);
