@@ -1,9 +1,8 @@
+// routes/bookingRoutes.js
 const express = require('express');
 const router = express.Router();
 const Booking = require('../models/booking');
-const { sendBookingSMS } = require('../models/smsService'); // <-- Correct import
-
-// Get all bookings
+const { sendBookingSMS } = require('../models/smsService');
 
 /**
  * @swagger
@@ -39,7 +38,7 @@ const { sendBookingSMS } = require('../models/smsService'); // <-- Correct impor
  *                     example: "2025-08-25"
  *                   status:
  *                     type: string
- *                     example: "Confirmed"
+ *                     example: "paid"
  *       500:
  *         description: Server error
  */
@@ -48,17 +47,16 @@ router.get('/', async (req, res) => {
     const bookings = await Booking.find();
     res.json(bookings);
   } catch (err) {
+    console.error('Error fetching bookings:', err.message);
     res.status(500).json({ message: err.message });
   }
 });
-
-// Create new booking and send SMS
 
 /**
  * @swagger
  * /bookings:
  *   post:
- *     summary: Create a new booking and send SMS to guest
+ *     summary: Create a new booking
  *     tags: [Bookings]
  *     requestBody:
  *       required: true
@@ -87,10 +85,10 @@ router.get('/', async (req, res) => {
  *                 example: "2025-08-25"
  *               status:
  *                 type: string
- *                 example: "Confirmed"
+ *                 example: "pending"
  *     responses:
  *       201:
- *         description: Booking created successfully and SMS sent
+ *         description: Booking created successfully
  *         content:
  *           application/json:
  *             schema:
@@ -102,34 +100,29 @@ router.post('/', async (req, res) => {
   try {
     const booking = new Booking(req.body);
     await booking.save();
-
-    console.log("Booking saved:", booking);
-
-    // Send SMS immediately after booking
-    console.log("Sending SMS to:", booking.phone_no);
-    sendBookingSMS(
-      booking.phone_no,
-      booking.guest_name,
-      booking.booked_room_no,
-      booking.checkin_date
-    )
-      .then(response => console.log("SMS response:", response))
-      .catch(err => console.error("SMS error:", err));
-
+    console.log('Booking saved:', booking);
+    if (booking.status === 'paid') {
+      console.log('Triggering SMS for new booking:', booking.phone_no);
+      await sendBookingSMS(
+        booking.phone_no,
+        booking.guest_name,
+        booking.booked_room_no,
+        booking.checkin_date
+      );
+      console.log('SMS sent for new booking:', booking._id);
+    }
     res.status(201).json(booking);
   } catch (err) {
-    console.error("Booking creation error:", err);
+    console.error('Booking creation error:', err.message);
     res.status(400).json({ message: err.message });
   }
 });
-
-// Update booking
 
 /**
  * @swagger
  * /bookings/{id}:
  *   patch:
- *     summary: Update an existing booking
+ *     summary: Update an existing booking and send SMS if status changes to paid
  *     tags: [Bookings]
  *     parameters:
  *       - in: path
@@ -165,13 +158,75 @@ router.post('/', async (req, res) => {
  *               $ref: '#/components/schemas/Booking'
  *       400:
  *         description: Invalid input / Update failed
+ *       404:
+ *         description: Booking not found
  */
 router.patch('/:id', async (req, res) => {
   try {
-    const booking = await Booking.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const booking = await Booking.findById(req.params.id);
+    if (!booking) {
+      console.error('Booking not found for ID:', req.params.id);
+      return res.status(404).json({ message: 'Booking not found' });
+    }
+
+    const updates = req.body;
+    const previousStatus = booking.status;
+
+    Object.assign(booking, updates);
+    await booking.save();
+    console.log('Booking updated:', booking);
+
+    if (updates.status === 'paid' && previousStatus !== 'paid') {
+      console.log('Triggering SMS for booking ID:', req.params.id, 'to:', booking.phone_no);
+      await sendBookingSMS(
+        booking.phone_no,
+        booking.guest_name,
+        booking.booked_room_no,
+        booking.checkin_date
+      );
+      console.log('SMS sent successfully for booking ID:', req.params.id);
+    }
+
     res.json(booking);
   } catch (err) {
+    console.error('Booking update error:', err.message);
     res.status(400).json({ message: err.message });
+  }
+});
+
+/**
+ * @swagger
+ * /bookings/{id}:
+ *   delete:
+ *     summary: Delete a booking
+ *     tags: [Bookings]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         description: Booking ID
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Booking deleted successfully
+ *       404:
+ *         description: Booking not found
+ *       500:
+ *         description: Server error
+ */
+router.delete('/:id', async (req, res) => {
+  try {
+    const booking = await Booking.findByIdAndDelete(req.params.id);
+    if (!booking) {
+      console.error('Booking not found for ID:', req.params.id);
+      return res.status(404).json({ message: 'Booking not found' });
+    }
+    console.log('Booking deleted:', booking);
+    res.json({ message: 'Booking deleted successfully' });
+  } catch (err) {
+    console.error('Booking deletion error:', err.message);
+    res.status(500).json({ message: err.message });
   }
 });
 
