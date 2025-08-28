@@ -98,7 +98,15 @@ router.get('/', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
-    const booking = new Booking(req.body);
+    const validStatuses = ['pending', 'paid', 'cancelled'];
+    if (req.body.status && !validStatuses.includes(req.body.status.toLowerCase())) {
+      console.error('Invalid status:', req.body.status);
+      return res.status(400).json({ message: 'Invalid status. Must be pending, paid, or cancelled.' });
+    }
+    const booking = new Booking({
+      ...req.body,
+      status: req.body.status ? req.body.status.toLowerCase() : 'pending',
+    });
     await booking.save();
     console.log('Booking saved:', booking);
     if (booking.status === 'paid') {
@@ -169,7 +177,16 @@ router.patch('/:id', async (req, res) => {
       return res.status(404).json({ message: 'Booking not found' });
     }
 
-    const updates = req.body;
+    const validStatuses = ['pending', 'paid', 'cancelled'];
+    if (req.body.status && !validStatuses.includes(req.body.status.toLowerCase())) {
+      console.error('Invalid status:', req.body.status);
+      return res.status(400).json({ message: 'Invalid status. Must be pending, paid, or cancelled.' });
+    }
+
+    const updates = {
+      ...req.body,
+      status: req.body.status ? req.body.status.toLowerCase() : booking.status,
+    };
     const previousStatus = booking.status;
 
     Object.assign(booking, updates);
