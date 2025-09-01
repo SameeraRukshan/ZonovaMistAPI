@@ -96,7 +96,7 @@ router.post('/upload', upload.array('photos', 10), async (req, res) => { // 'pho
       return res.status(400).json({ message: 'Invalid Room ID.' });
     }
 
-    const photoPaths = files.map(file => `/uploads/${file.filename}`);
+    const photoPaths = files.map(file => file.filename);
 
     const room = await Room.findByIdAndUpdate(
       roomId,

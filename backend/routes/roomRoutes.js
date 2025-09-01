@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const Room = require('../models/room'); // create this model
+const fs = require('fs');
+const path = require('path');
 
 // GET all rooms
 /**
@@ -162,6 +164,27 @@ router.post('/', async (req, res) => {
   } catch (err) {
     res.status(400).json({ message: err.message });
   }
+});
+
+router.get('/image/:filename', (req, res) => {
+  const fileName = req.params.filename; // extract filename from URL
+  const imagePath = path.join(__dirname,"../uploads", fileName);
+  console.log('Serving image from path:', imagePath);
+
+  if (!fs.existsSync(imagePath)) {
+    return res.status(404).send('Image not found');
+  }
+
+  // Get file stats
+  const stat = fs.statSync(imagePath);
+  res.writeHead(200, {
+    'Content-Type': 'image/jpeg', // you can make this dynamic
+    'Content-Length': stat.size,
+  });
+
+  // Stream file
+  const readStream = fs.createReadStream(imagePath);
+  readStream.pipe(res);
 });
 
 
