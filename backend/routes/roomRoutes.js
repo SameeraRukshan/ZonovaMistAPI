@@ -78,12 +78,18 @@ router.get('/', async (req, res) => {
  */
 router.patch('/:id', async (req, res) => {
   try {
-    const { status } = req.body;
+    const updateData = { ...req.body, updatedAt: new Date() };
+
     const room = await Room.findByIdAndUpdate(
       req.params.id,
-      { status, updatedAt: new Date() },
+      updateData,
       { new: true }
     );
+
+    if (!room) {
+      return res.status(404).json({ message: 'Room not found' });
+    }
+
     res.json(room);
   } catch (err) {
     res.status(500).json({ message: 'Failed to update room', error: err.message });
@@ -187,5 +193,19 @@ router.get('/image/:filename', (req, res) => {
   readStream.pipe(res);
 });
 
+// DELETE room
+router.delete('/:id', async (req, res) => {
+  try {
+    const room = await Room.findByIdAndDelete(req.params.id);
+
+    if (!room) {
+      return res.status(404).json({ message: 'Room not found' });
+    }
+
+    res.json({ message: 'Room deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to delete room', error: err.message });
+  }
+});
 
 module.exports = router;
