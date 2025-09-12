@@ -100,4 +100,44 @@ async function sendReminderSMS(clientPhone, clientName, roomNo, checkInDate) {
   }
 }
 
-module.exports = { sendBookingSMS, sendReminderSMS };
+async function sendBirthdaySMS(clientPhone, clientName) {
+  try {
+    const settings = await Setting.findOne({});
+    if (!settings) throw new Error('Settings not found in database');
+
+    const userId = process.env.USER_ID;
+    const apiKey = process.env.API_KEY;
+    if (!userId || !apiKey) throw new Error('Missing Notify.lk credentials');
+
+    const senderId = settings.guestHouseName || 'Zonova Mist';
+
+    // Use default template if not set in DB
+    const template =
+      settings.birthdaySmsTemplate ||
+      'Happy Birthday {clientName}! Wishing you a wonderful year ahead from {guestHouseName}. - {hostName}';
+
+    const message = template
+      .replace('{clientName}', clientName || '')
+      .replace('{guestHouseName}', settings.guestHouseName || 'Zonova Mist')
+      .replace('{hostName}', settings.hostName || 'Team');
+
+    const params = new URLSearchParams();
+    params.append('user_id', userId);
+    params.append('api_key', apiKey);
+    params.append('sender_id', senderId);
+    params.append('to', clientPhone);
+    params.append('message', message);
+
+    const response = await axios.post(
+      'https://app.notify.lk/api/v1/send',
+      params.toString()
+    );
+
+    return response.data;
+  } catch (err) {
+    console.error('Error sending birthday SMS:', err.message);
+    throw err;
+  }
+}
+
+module.exports = { sendBookingSMS, sendReminderSMS, sendBirthdaySMS };

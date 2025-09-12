@@ -1,6 +1,6 @@
 const cron = require('node-cron');
 const Booking = require('../models/booking');
-const { sendReminderSMS } = require('../models/smsService');
+const { sendReminderSMS,sendBirthdaySMS } = require('../models/smsService');
 
 // Runs everyday at 8:00 AM
 cron.schedule('0 8 * * *', async () => {   // change to '0 8 * * *' for real use
@@ -51,6 +51,37 @@ cron.schedule('0 8 * * *', async () => {   // change to '0 8 * * *' for real use
         await booking.save();
       } catch (err) {
         console.error(`❌ Failed to send SMS to ${booking.phone_no}`, err);
+      }
+    }
+
+    // Send birthday wishes
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const todayEnd = new Date(todayStart);
+    todayEnd.setDate(todayEnd.getDate() + 1);
+
+    const birthdays = await Booking.find({
+      birthday: { $gte: todayStart, $lt: todayEnd },
+      birthday_sms_sent: false
+    });
+
+    console.log(`🎂 Found ${birthdays.length} birthday(s) today`);
+
+    for (const booking of birthdays) {
+      try {
+        await sendBirthdaySMS(
+          booking.phone_no,
+          booking.guest_name
+        );
+
+        console.log(`🎉 Birthday SMS sent to ${booking.phone_no}`);
+
+        booking.birthday_sms_sent = true;
+        booking.birthdaySmsSentAt = new Date();
+        await booking.save();
+      } catch (err) {
+        console.error(`❌ Failed to send birthday SMS to ${booking.phone_no}`, err);
       }
     }
   } catch (err) {

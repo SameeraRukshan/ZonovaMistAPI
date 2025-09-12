@@ -18,6 +18,9 @@ const bookingSchema = new Schema({
   status: { type: String, default: 'Pending' },
   reminder_sms_sent: { type: Boolean, default: false },
   reminderSmsSentAt: { type: Date, default: null },
+  birthday:{type: Date, required: false},
+  birthday_sms_sent: { type: Boolean, default: false },
+  birthdaySmsSentAt: { type: Date, default: null },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Booking', bookingSchema);
