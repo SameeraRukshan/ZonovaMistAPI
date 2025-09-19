@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: zonova-mist
+    env: node
+    rootDir: backend/
+    buildCommand: npm install
+    startCommand: npm run dev
+    plan: free
+    envVars:
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: PORT
+        sync: false
+      - key: API_KEY
+        sync: false
+      - key: USER_ID
+        sync: false
+      - key: HOTEL_NAME
+        sync: false
+      - key: TIMEZONE
+        sync: false
