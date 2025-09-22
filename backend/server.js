@@ -27,6 +27,9 @@ app.use('/api/bookings', require('./routes/bookingRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/images', require('./routes/imageRoutes'));
 app.use('/api/settings', require ('./routes/settingsRoutes'));
+app.get("/", (req, res) => {
+  res.send("Backend is live 🚀");
+});
 
 // Swagger route
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
