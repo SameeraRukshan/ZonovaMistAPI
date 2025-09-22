@@ -6,6 +6,9 @@ const cron = require('node-cron');
 const Booking = require('./models/booking'); 
 const { sendReminderSMS } = require('./models/smsService');
 const { swaggerUi, swaggerSpec } = require("./swagger");
+const path = require('path');
+const http = require('http');
+const WebSocket = require('ws');
 
 dotenv.config();
 connectDB();
@@ -15,8 +18,6 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
-
-const path = require('path');
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Routes
@@ -27,23 +28,41 @@ app.use('/api/bookings', require('./routes/bookingRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/images', require('./routes/imageRoutes'));
 app.use('/api/settings', require ('./routes/settingsRoutes'));
-app.get("/", (req, res) => {
-  res.send("Backend is live 🚀");
-});
 
 // Swagger route
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-// 🚀 Cron Job: Every day at 8 AM
+// Root
+app.get("/", (req, res) => {
+  res.send("Backend is running 🚀");
+});
+
+// Create HTTP server
+const server = http.createServer(app);
+
+// WebSocket server on `/ws`
+const wss = new WebSocket.Server({ server, path: '/ws' });
+
+wss.on('connection', (ws) => {
+  console.log('🔌 WebSocket connected');
+
+  ws.on('message', (msg) => {
+    console.log(`📩 Received: ${msg}`);
+    ws.send(`Echo: ${msg}`); // send back to client
+  });
+
+  ws.on('close', () => {
+    console.log('❌ WebSocket closed');
+  });
+});
+
+// Cron Job (your existing code)
 cron.schedule('0 8 * * *', async () => {
   console.log('⏰ Running daily check-in reminder job...');
-
   const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-
   try {
     const bookings = await Booking.find({ checkInDate: today });
     console.log(`Found ${bookings.length} bookings for today.`);
-
     for (const booking of bookings) {
       await sendReminderSMS(
         booking.clientPhone,
@@ -57,7 +76,9 @@ cron.schedule('0 8 * * *', async () => {
   }
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+// Start server
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
 });
-require('./jobs/reminderJob'); // Import the reminder job to start it
+
+require('./jobs/reminderJob'); 
