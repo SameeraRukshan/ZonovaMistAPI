@@ -9,7 +9,6 @@ const roomSchema = new mongoose.Schema({
   pricePerNight: Number,
   status: { type: String, enum: ['available', 'occupied', 'maintenance'] },
   amenities: [String],
-  photos: [String],
 }, { timestamps: true });
 
 module.exports = mongoose.model('Room', roomSchema);

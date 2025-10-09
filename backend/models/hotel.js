@@ -14,7 +14,6 @@ const hotelSchema = new mongoose.Schema({
   email: String,
   website: String,
   amenities: [String],
-  photos: [String],
 }, { timestamps: true });
 
 module.exports = mongoose.model('Hotel', hotelSchema);

@@ -1,116 +1,193 @@
-const express = require('express');
+// routes/imageRoutes.js
+const express = require("express");
 const router = express.Router();
-const fs = require('fs');
-const path = require('path');
-const mongoose = require('mongoose');
-const multer = require('multer'); 
+const multer = require("multer");
+const cloudinary = require("../config/cloudinary");
+const mongoose = require("mongoose");
+const path = require("path");
 
-// Models
-const Room = require('../models/room');
-const Hotel = require('../models/hotel'); 
+const Image = require("../models/image");
+const Room = require("../models/room");
+const Hotel = require("../models/hotel");
+const Booking = require("../models/booking");
 
-// Configure Multer for file storage
-const storage = multer.diskStorage({
-  destination: function(req, file, cb) {
-    const uploadsDir = path.join(__dirname, '..', 'uploads');
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir);
+// ✅ Multer config (memory storage)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: (req, file, cb) => {
+    const allowedExtensions = /\.(jpg|jpeg|png|webp)$/i;
+    const allowedMimes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+
+    if (allowedMimes.includes(file.mimetype) || allowedExtensions.test(file.originalname)) {
+      cb(null, true);
+    } else {
+      console.warn("❌ Rejected file:", file.originalname, "type:", file.mimetype);
+      cb(new Error("Only .jpg, .jpeg, .png, and .webp files are allowed"), false);
     }
-    cb(null, 'uploads/');
   },
-  filename: function(req, file, cb) {
-    const entityId = req.body.roomId || req.body.hotelId; // works for both
-    const extension = path.extname(file.originalname);
-    cb(null, `${entityId}_${Date.now()}${extension}`);
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB max
+});
+
+// ✅ Helper to upload to Cloudinary
+async function uploadToCloudinary(fileBuffer, originalName, folderName) {
+  return new Promise((resolve, reject) => {
+    const baseName = path
+      .parse(originalName)
+      .name.replace(/\s+/g, "_")
+      .replace(/[^a-zA-Z0-9_\-]/g, "")
+      .toLowerCase()
+      .slice(0, 60);
+
+    const publicId = `${baseName}_${Date.now()}`;
+
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        folder: `zonova_mist/${folderName}`,
+        public_id: publicId,
+        resource_type: "image",
+      },
+      (error, result) => {
+        if (error) return reject(error);
+        resolve({
+          url: result.secure_url,
+          public_id: result.public_id,
+        });
+      }
+    );
+
+    uploadStream.end(fileBuffer);
+  });
+}
+
+// ✅ POST /api/images/upload
+router.post("/upload", upload.array("photos", 10), async (req, res) => {
+  try {
+    console.log("📸 Upload endpoint hit");
+
+    const { moduleId, moduleType, uploadedBy, imageType } = req.body;
+
+    if (!moduleId || !moduleType)
+      return res.status(400).json({ message: "moduleId and moduleType are required" });
+
+    if (!mongoose.Types.ObjectId.isValid(moduleId))
+      return res.status(400).json({ message: "Invalid moduleId format" });
+
+    const normalizedType = String(moduleType).trim();
+    if (!["Room", "Hotel", "Booking"].includes(normalizedType))
+      return res.status(400).json({ message: "Invalid moduleType (Room | Hotel | Booking)" });
+
+    // ✅ Detect model dynamically
+    const Model =
+      normalizedType === "Room"
+        ? Room
+        : normalizedType === "Hotel"
+        ? Hotel
+        : Booking;
+
+    const target = await Model.findById(moduleId);
+    if (!target)
+      return res.status(404).json({ message: `${normalizedType} not found` });
+
+    if (!req.files || req.files.length === 0)
+      return res.status(400).json({ message: "No images uploaded" });
+
+    const results = [];
+
+    for (const file of req.files) {
+      try {
+        const folder = normalizedType.toLowerCase();
+        const uploaded = await uploadToCloudinary(file.buffer, file.originalname, folder);
+
+        const imgDoc = await Image.create({
+          url: uploaded.url,
+          public_id: uploaded.public_id,
+          moduleId,
+          moduleType: normalizedType,
+          uploadedBy: uploadedBy || "admin",
+          imageType: imageType || "general", // 👈 NEW FIELD
+        });
+
+        results.push({
+          url: uploaded.url,
+          public_id: uploaded.public_id,
+          dbId: imgDoc._id,
+        });
+      } catch (fileErr) {
+        console.error("❌ Error uploading a file:", fileErr);
+        results.push({
+          file: file.originalname,
+          error: fileErr.message || "Upload failed",
+        });
+      }
+    }
+
+    res.status(200).json({
+      message: "Upload completed",
+      results,
+    });
+  } catch (err) {
+    console.error("💥 Upload failed:", err);
+    res.status(500).json({ message: "Upload failed", error: err.message });
   }
 });
 
-const upload = multer({ storage: storage });
-
-/**
- * ===============================
- * ROOM IMAGE UPLOAD
- * ===============================
- */
-router.post('/upload/room', upload.array('photos', 10), async (req, res) => {
+// ✅ GET /api/images/:moduleType/:moduleId
+router.get("/:moduleType/:moduleId", async (req, res) => {
   try {
-    const roomId = req.body.roomId;
-    const files = req.files;
+    const { moduleType, moduleId } = req.params;
+    const normalizedType = String(moduleType).trim();
 
-    if (!roomId || !files || files.length === 0) {
-      return res.status(400).json({ message: 'Room ID and at least one image are required.' });
-    }
+    if (!["Room", "Hotel", "Booking"].includes(normalizedType))
+      return res.status(400).json({ message: "Invalid moduleType" });
 
-    if (!mongoose.Types.ObjectId.isValid(roomId)) {
-      return res.status(400).json({ message: 'Invalid Room ID.' });
-    }
+    if (!mongoose.Types.ObjectId.isValid(moduleId))
+      return res.status(400).json({ message: "Invalid moduleId format" });
 
-    const photoPaths = files.map(file => file.filename);
+    const images = await Image.find({
+      moduleId,
+      moduleType: normalizedType,
+    }).sort({ createdAt: -1 });
 
-    const room = await Room.findByIdAndUpdate(
-      roomId,
-      { $push: { photos: { $each: photoPaths } } },
-      { new: true, runValidators: true }
-    );
-
-    if (!room) {
-      return res.status(404).json({ message: 'Room not found.' });
-    }
-
-    res.status(200).json({ 
-      message: 'Room images uploaded successfully',
-      photoUrls: photoPaths
-    });
-
-  } catch (error) {
-    console.error('Error uploading room images:', error);
-    res.status(500).json({ message: 'Server error occurred.' });
+    res.json(images);
+  } catch (err) {
+    console.error("💥 Fetch images error:", err);
+    res.status(500).json({ message: "Failed to fetch images", error: err.message });
   }
 });
 
-/**
- * ===============================
- * HOTEL IMAGE UPLOAD
- * ===============================
- */
-router.post('/upload/hotel', upload.array('photos', 10), async (req, res) => {
-  console.log('Received request to /api/images/upload/hotel');
-  console.log('Body:', req.body);
-  console.log('Files:', req.files);
-  console.log('Hotel ID:', req.body.hotelId);
+// ✅ DELETE by public_id (in body)
+router.delete("/image", express.json(), async (req, res) => {
   try {
-    const hotelId = req.body.hotelId;
-    console.log('Hotel ID:', hotelId);
-    const files = req.files;
+    const { public_id } = req.body;
+    if (!public_id) return res.status(400).json({ message: "public_id required" });
 
-    if (!hotelId || !files || files.length === 0) {
-      return res.status(400).json({ message: 'Hotel ID and at least one image are required.' });
-    }
+    const image = await Image.findOne({ public_id });
+    if (!image) return res.status(404).json({ message: "Image not found in DB" });
 
-    if (!mongoose.Types.ObjectId.isValid(hotelId)) {
-      return res.status(400).json({ message: 'Invalid Hotel ID.' });
-    }
+    await cloudinary.uploader.destroy(public_id);
+    await image.deleteOne();
 
-    const photoPaths = files.map(file => file.filename);
+    res.json({ message: "Image deleted successfully" });
+  } catch (err) {
+    console.error("💥 Delete image error:", err);
+    res.status(500).json({ message: "Image deletion failed", error: err.message });
+  }
+});
 
-    const hotel = await Hotel.findByIdAndUpdate(
-      hotelId,
-      { $push: { photos: { $each: photoPaths } } },
-      { new: true, runValidators: true }
-    );
+// ✅ DELETE fallback (by encoded param)
+router.delete("/:public_id", async (req, res) => {
+  try {
+    const decoded = decodeURIComponent(req.params.public_id);
+    const image = await Image.findOne({ public_id: decoded });
+    if (!image) return res.status(404).json({ message: "Image not found in DB" });
 
-    if (!hotel) {
-      return res.status(404).json({ message: 'Hotel not found.' });
-    }
+    await cloudinary.uploader.destroy(decoded);
+    await image.deleteOne();
 
-    res.status(200).json({ 
-      message: 'Hotel images uploaded successfully',
-      photoUrls: photoPaths
-    });
-
-  } catch (error) {
-    console.error('Error uploading hotel images:', error);
-    res.status(500).json({ message: 'Server error occurred.' });
+    res.json({ message: "Image deleted successfully" });
+  } catch (err) {
+    console.error("💥 Param delete error:", err);
+    res.status(500).json({ message: "Image deletion failed", error: err.message });
   }
 });
 

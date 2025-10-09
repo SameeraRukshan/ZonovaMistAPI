@@ -10,7 +10,7 @@ const path = require('path');
 const http = require('http');
 const WebSocket = require('ws');
 
-dotenv.config();
+require('dotenv').config();
 connectDB();
 
 const app = express();
