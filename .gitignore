@@ -143,3 +143,4 @@ vite.config.ts.timestamp-*
 *.iml
 *.ipr
 *.iws
+backend/.env
