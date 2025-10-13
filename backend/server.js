@@ -10,61 +10,63 @@ const path = require('path');
 const http = require('http');
 const WebSocket = require('ws');
 
-require('dotenv').config();
+dotenv.config();
 connectDB();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// ✅ CORS setup: allow all origins, handle preflight
 app.use(cors({
-  origin: "*",  // ✅ allow all origins for now (later restrict to your domain)
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"]
-}));  
+  origin: "*",
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+}));
 
+// Handle OPTIONS preflight for all routes
+app.options('*', cors(), (req, res) => {
+  res.sendStatus(200);
+});
+
+// ✅ Body parser
 app.use(express.json({ limit: '50mb' }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Routes
+// ✅ Routes
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/rooms', require('./routes/roomRoutes'));
 app.use('/api/hotels', require('./routes/hotelRoutes'));
 app.use('/api/bookings', require('./routes/bookingRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/images', require('./routes/imageRoutes'));
-app.use('/api/settings', require ('./routes/settingsRoutes'));
+app.use('/api/settings', require('./routes/settingsRoutes'));
 
-// Swagger route
+// Swagger
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-// Root
-app.get("/", (req, res) => {
-  res.send("Backend is running 🚀");
-});
+// Root route
+app.get("/", (req, res) => res.send("Backend is running 🚀"));
 
 // Create HTTP server
 const server = http.createServer(app);
 
-// WebSocket server on `/ws`
+// WebSocket server
 const wss = new WebSocket.Server({ server, path: '/ws' });
-
 wss.on('connection', (ws) => {
   console.log('🔌 WebSocket connected');
 
   ws.on('message', (msg) => {
     console.log(`📩 Received: ${msg}`);
-    ws.send(`Echo: ${msg}`); // send back to client
+    ws.send(`Echo: ${msg}`);
   });
 
-  ws.on('close', () => {
-    console.log('❌ WebSocket closed');
-  });
+  ws.on('close', () => console.log('❌ WebSocket closed'));
 });
 
-// Cron Job (your existing code)
+// Cron Job: daily check-in reminder
 cron.schedule('0 8 * * *', async () => {
   console.log('⏰ Running daily check-in reminder job...');
-  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const today = new Date().toISOString().split('T')[0];
   try {
     const bookings = await Booking.find({ checkInDate: today });
     console.log(`Found ${bookings.length} bookings for today.`);
@@ -86,4 +88,5 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
 });
 
-require('./jobs/reminderJob'); 
+// Include any additional jobs
+require('./jobs/reminderJob');
