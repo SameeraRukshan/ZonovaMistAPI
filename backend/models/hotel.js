@@ -14,6 +14,8 @@ const hotelSchema = new mongoose.Schema({
   email: String,
   website: String,
   amenities: [String],
+  price: { type: Number, default: 0 },         
+  status: { type: String, enum: ['available', 'booked', 'maintenance'], default: 'available' },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Hotel', hotelSchema);
