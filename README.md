@@ -1,88 +1,91 @@
-# ZonovaMistAPI
-🧠 Zonova Mist Admin – Release Notes
+🧠 Zonova Mist Admin – Backend Release Notes
 🏷️ Version 4 (v1.0.0)
 
 Release Date: October 2025
 Deployment:
 
-Backend: Render
+Hosting: Render
 
-Frontend: Play Store (Android) – Internal Testing
-
-Web Testing: Flutter Web via Chrome
+Frontend Integration: Flutter (Android & Web)
 
 🚀 Overview
 
-Zonova Mist Admin is a complete management system built for partners and administrators to manage hotel data efficiently.
-It includes a robust Node.js backend with a Flutter-powered frontend, ensuring seamless integration between data and UI.
+Zonova Mist Admin (Backend) powers the administrative and partner management features for the Zonova Mist platform.
+It’s a RESTful Node.js + Express API connected to MongoDB, providing secure CRUD operations for managing hotel data.
 
-🖥️ Frontend (Flutter + Dart)
+⚙️ Tech Stack
 
-Platform: Android, Web
-Key Features:
+Runtime: Node.js
 
-🌆 Partner Hotels Management Interface
+Framework: Express.js
 
-✏️ Edit, Add, and Delete Hotel details
+Database: MongoDB (Mongoose)
 
-🖼️ Integrated Image Manager (CommonImageManager)
+Middleware: CORS, Body-Parser, Dotenv
 
-🔄 Real-time Refresh with Riverpod State Management
+Deployment: Render
 
-💬 Snackbar Feedback for all CRUD operations
+🏨 Core API Features
 
-🎨 Modern UI using Material Design & Flutter Slidable
+✅ Create, Read, Update, Delete (CRUD) for Hotels
 
-⚙️ Configurable API base via AppConfig
+🔍 Search hotels by city or star rating
 
-Build Info:
+🕓 Automatic createdAt and updatedAt timestamps
 
-Built with Flutter 3.x (Stable Channel)
+💬 Structured JSON responses with detailed error messages
 
-Supports Android (AAB upload via Play Console)
+🌐 CORS enabled for Flutter Web requests
 
-Optimized for both Mobile and Web Testing
+🧑‍💻 Setup & Run Locally
+1️⃣ Clone and navigate
+git clone <your-repo-link>
+cd backend
 
-🧩 Backend (Node.js + Express + MongoDB)
+2️⃣ Install dependencies
+npm install
 
-Tech Stack:
+3️⃣ Create environment file
 
-Node.js
+Inside the backend folder, create a .env file and add:
 
-Express
+PORT=5000
+MONGO_URI=____
 
-MongoDB (Mongoose ORM)
+4️⃣ Start the server
 
-CORS, Dotenv, Body-Parser
+For development (auto-restart on save):
 
-Render for Deployment
+npm run dev
 
-API Highlights:
 
-🏨 Full CRUD for Hotels (/partner-hotels)
+Uses nodemon for hot reload.
 
-🌍 Query by city or star rating
+Or for production:
 
-🔗 MongoDB integration via Mongoose
+npm start
 
-🔒 CORS properly configured for Flutter Web access
 
-⚙️ Error handling with descriptive JSON responses
+Server will start at:
+👉 http://localhost:3000
 
-Improvements in v1.0.0:
+🧪 Testing
 
-Enhanced error handling and validation
+Once running, test your API:
 
-Refined CORS setup to support cross-origin requests
+GET http://localhost:3000/
 
-Consistent JSON structure for all responses
 
-Stability updates to prevent server disconnections
+You should receive a list of hotel documents from MongoDB.
 
-🧰 Development Notes
+🧾 Current Release Highlights (v1.0.0)
 
-Always run flutter clean and flutter pub get before creating new builds.
+🧠 Added full CRUD routes (GET, POST, PATCH, DELETE)
 
-Backend uses environment variables (.env) for sensitive configuration – not committed to Git.
+🌍 CORS setup for frontend API access
 
-Use npm start (Render) or nodemon server.js (local testing).
+⚙️ Improved error handling and response structure
+
+🕓 Auto timestamp updates for each modification
+
+🔄 Stable connection with Render-hosted database
