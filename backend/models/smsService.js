@@ -140,4 +140,25 @@ async function sendBirthdaySMS(clientPhone, clientName) {
   }
 }
 
-module.exports = { sendBookingSMS, sendReminderSMS, sendBirthdaySMS };
+async function sendInvoiceSMS(clientPhone, message) {
+  try {
+    const userId = process.env.USER_ID;
+    const apiKey = process.env.API_KEY;
+
+    const params = new URLSearchParams();
+    params.append('user_id', userId);
+    params.append('api_key', apiKey);
+    params.append('sender_id', 'Zonova Mist');
+    params.append('to', clientPhone);
+    params.append('message', message);
+
+    const response = await axios.post('https://app.notify.lk/api/v1/send', params.toString());
+    console.log('Invoice SMS sent:', response.data);
+    return response.data;
+  } catch (err) {
+    console.error('Error sending invoice SMS:', err.message);
+    throw err;
+  }
+}
+
+module.exports = { sendBookingSMS, sendReminderSMS, sendBirthdaySMS, sendInvoiceSMS };
