@@ -48,6 +48,19 @@ app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 // Root route
 app.get("/", (req, res) => res.send("Backend is running 🚀"));
 
+app.get('/invoice/:bookingId', async (req, res) => {
+  const booking = await Booking.findById(req.params.bookingId);
+  if (!booking) return res.status(404).send('Booking not found');
+
+  res.send(`
+    <h1>Invoice for ${booking.guest_name}</h1>
+    <p>Room: ${booking.booked_room_no}</p>
+    <p>Total: ${booking.total_price}</p>
+    <p>Food: ${booking.food || 0}</p>
+    <p>Notes: ${booking.special_notes}</p>
+  `);
+});
+
 // Create HTTP server
 const server = http.createServer(app);
 
