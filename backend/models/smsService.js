@@ -142,22 +142,60 @@ async function sendBirthdaySMS(clientPhone, clientName) {
 
 async function sendInvoiceSMS(clientPhone, message) {
   try {
+    console.log('📨 Sending invoice SMS to:', clientPhone);
+    
     const userId = process.env.USER_ID;
     const apiKey = process.env.API_KEY;
+
+    if (!userId || !apiKey) {
+      console.error('❌ Missing USER_ID or API_KEY in environment');
+      throw new Error('Missing Notify.lk credentials');
+    }
+
+    // Get sender ID from settings or use default
+    let senderId = 'Zonova Mist';
+    try {
+      const settings = await Setting.findOne({});
+      if (settings && settings.guestHouseName) {
+        senderId = settings.guestHouseName;
+      }
+    } catch (settingsErr) {
+      console.warn('⚠️ Could not fetch settings, using default sender ID');
+    }
 
     const params = new URLSearchParams();
     params.append('user_id', userId);
     params.append('api_key', apiKey);
-    params.append('sender_id', 'Zonova Mist');
+    params.append('sender_id', senderId);
     params.append('to', clientPhone);
     params.append('message', message);
 
-    const response = await axios.post('https://app.notify.lk/api/v1/send', params.toString());
-    console.log('Invoice SMS sent:', response.data);
+    console.log('📤 SMS Params:', {
+      user_id: userId,
+      sender_id: senderId,
+      to: clientPhone,
+      message: message.substring(0, 50) + '...'
+    });
+
+    const response = await axios.post(
+      'https://app.notify.lk/api/v1/send',
+      params.toString(),
+      {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
+      }
+    );
+
+    console.log('✅ Invoice SMS sent successfully:', response.data);
     return response.data;
   } catch (err) {
-    console.error('Error sending invoice SMS:', err.message);
-    throw err;
+    console.error('❌ Error sending invoice SMS:', {
+      message: err.message,
+      response: err.response?.data,
+      status: err.response?.status
+    });
+    throw new Error(`Failed to send SMS: ${err.response?.data?.message || err.message}`);
   }
 }
 
