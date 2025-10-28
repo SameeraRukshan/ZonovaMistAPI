@@ -5,42 +5,7 @@ const Booking = require('../models/booking');
 const { sendBookingSMS } = require('../models/smsService');
 
 /**
- * @swagger
- * /bookings:
- *   get:
- *     summary: Get all bookings
- *     tags: [Bookings]
- *     responses:
- *       200:
- *         description: List of all bookings
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 type: object
- *                 properties:
- *                   _id:
- *                     type: string
- *                     example: 64a1234b56c7890d1234ef56
- *                   guest_name:
- *                     type: string
- *                     example: "Shan Wijesooriya"
- *                   phone_no:
- *                     type: string
- *                     example: "+94771234567"
- *                   booked_room_no:
- *                     type: string
- *                     example: "101"
- *                   checkin_date:
- *                     type: string
- *                     format: date
- *                     example: "2025-08-25"
- *                   status:
- *                     type: string
- *                     example: "paid"
- *       500:
- *         description: Server error
+ * GET /bookings - Fetch all bookings
  */
 router.get('/', async (req, res) => {
   try {
@@ -53,62 +18,18 @@ router.get('/', async (req, res) => {
 });
 
 /**
- * @swagger
- * /bookings:
- *   post:
- *     summary: Create a new booking
- *     tags: [Bookings]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - guest_name
- *               - phone_no
- *               - booked_room_no
- *               - checkin_date
- *             properties:
- *               guest_name:
- *                 type: string
- *                 example: "Shan Wijesooriya"
- *               phone_no:
- *                 type: string
- *                 example: "+94771234567"
- *               booked_room_no:
- *                 type: string
- *                 example: "101"
- *               checkin_date:
- *                 type: string
- *                 format: date
- *                 example: "2025-08-25"
- *               status:
- *                 type: string
- *                 example: "pending"
- *     responses:
- *       201:
- *         description: Booking created successfully
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Booking'
- *       400:
- *         description: Invalid input / Booking creation failed
+ * POST /bookings - Create a new booking
  */
 router.post('/', async (req, res) => {
   try {
-    // ✅ Validate required fields
+    // ✅ Validate only required fields
     const requiredFields = [
-      'guest_nic',
       'guest_name',
       'booked_room_no',
       'checkin_date',
       'checkout_date',
       'phone_no',
-      'adult_count',
-      'child_count',
-      'guest_address'
+      'adult_count'
     ];
     for (const field of requiredFields) {
       if (!req.body[field]) {
@@ -123,17 +44,29 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ message: 'Invalid status. Must be pending, paid, or cancelled.' });
     }
 
-    // ✅ Create booking
+    // ✅ Create booking (optional fields safely handled)
     const booking = new Booking({
-      ...req.body,
-      food: req.body.food || 0, // new food field
-      status: req.body.status ? req.body.status.toLowerCase() : 'pending',
+      guest_nic: req.body.guest_nic || null,
+      guest_name: req.body.guest_name,
+      booked_room_no: req.body.booked_room_no,
+      checkin_date: req.body.checkin_date,
+      checkout_date: req.body.checkout_date,
+      phone_no: req.body.phone_no,
+      adult_count: req.body.adult_count,
+      child_count: req.body.child_count || 0,
+      guest_address: req.body.guest_address || '',
+      total_price: req.body.total_price || 0,
+      special_notes: req.body.special_notes || '',
+      advance_amount: req.body.advance_amount || 0,
+      birthday: req.body.birthday || null,
+      food: req.body.food || 0,
+      status: req.body.status ? req.body.status.toLowerCase() : 'pending'
     });
 
     await booking.save();
     console.log('Booking saved:', booking);
 
-    // ✅ Send SMS if status = paid
+    // ✅ Optional: send SMS if status = paid
     if (booking.status === 'paid') {
       console.log('Triggering SMS for new booking:', booking.phone_no);
       await sendBookingSMS(
@@ -153,47 +86,7 @@ router.post('/', async (req, res) => {
 });
 
 /**
- * @swagger
- * /bookings/{id}:
- *   patch:
- *     summary: Update an existing booking and send SMS if status changes to paid
- *     tags: [Bookings]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         description: Booking ID
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               guest_name:
- *                 type: string
- *               phone_no:
- *                 type: string
- *               booked_room_no:
- *                 type: string
- *               checkin_date:
- *                 type: string
- *                 format: date
- *               status:
- *                 type: string
- *     responses:
- *       200:
- *         description: Booking updated successfully
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Booking'
- *       400:
- *         description: Invalid input / Update failed
- *       404:
- *         description: Booking not found
+ * PATCH /bookings/:id - Update booking
  */
 router.patch('/:id', async (req, res) => {
   try {
@@ -209,18 +102,17 @@ router.patch('/:id', async (req, res) => {
       return res.status(400).json({ message: 'Invalid status. Must be pending, paid, or cancelled.' });
     }
 
-    const updates = {
+    const previousStatus = booking.status;
+    Object.assign(booking, {
       ...req.body,
       status: req.body.status ? req.body.status.toLowerCase() : booking.status,
-    };
-    const previousStatus = booking.status;
+    });
 
-    Object.assign(booking, updates);
     await booking.save();
     console.log('Booking updated:', booking);
 
-    if (updates.status === 'paid' && previousStatus !== 'paid') {
-      console.log('Triggering SMS for booking ID:', req.params.id, 'to:', booking.phone_no);
+    if (booking.status === 'paid' && previousStatus !== 'paid') {
+      console.log('Triggering SMS for booking ID:', req.params.id);
       await sendBookingSMS(
         booking.phone_no,
         booking.guest_name,
@@ -238,25 +130,7 @@ router.patch('/:id', async (req, res) => {
 });
 
 /**
- * @swagger
- * /bookings/{id}:
- *   delete:
- *     summary: Delete a booking
- *     tags: [Bookings]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         description: Booking ID
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Booking deleted successfully
- *       404:
- *         description: Booking not found
- *       500:
- *         description: Server error
+ * DELETE /bookings/:id - Delete a booking
  */
 router.delete('/:id', async (req, res) => {
   try {

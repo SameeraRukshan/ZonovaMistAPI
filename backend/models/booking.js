@@ -1,6 +1,5 @@
 const mongoose = require('mongoose');
-const { Schema } = mongoose; // Destructure Schema for cleaner usage
-const { Decimal128 } = Schema.Types; // Optional: Destructure Decimal128 if used frequently
+const { Schema } = mongoose;
 
 const bookingSchema = new Schema({
   guest_nic: { type: String, required: false },
@@ -9,13 +8,12 @@ const bookingSchema = new Schema({
   checkin_date: { type: Date, required: true },
   checkout_date: { type: Date, required: true },
   phone_no: { type: String, required: true },
-  adult_count: { type: Number, required: true }, 
+  adult_count: { type: Number, required: true },
   child_count: { type: Number, required: false },
   guest_address: { type: String, required: false },
-  total_price: { type: Decimal128, default: '0' }, 
-  food: { type: Decimal128, default: '0' }, 
+  total_price: { type: Schema.Types.Decimal128, default: '0' },
   special_notes: { type: String, required: false, default: '' }, 
-  advance_amount: { type: Decimal128, required: false, default: '0' }, 
+  advance_amount: { type: Schema.Types.Decimal128, default: '0' },
   status: { type: String, default: 'Pending' },
   reminder_sms_sent: { type: Boolean, default: false },
   reminderSmsSentAt: { type: Date, default: null },
