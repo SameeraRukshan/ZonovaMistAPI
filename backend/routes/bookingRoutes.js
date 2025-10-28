@@ -98,17 +98,42 @@ router.get('/', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
+    // ✅ Validate required fields
+    const requiredFields = [
+      'guest_nic',
+      'guest_name',
+      'booked_room_no',
+      'checkin_date',
+      'checkout_date',
+      'phone_no',
+      'adult_count',
+      'child_count',
+      'guest_address'
+    ];
+    for (const field of requiredFields) {
+      if (!req.body[field]) {
+        return res.status(400).json({ message: `Missing required field: ${field}` });
+      }
+    }
+
+    // ✅ Validate status
     const validStatuses = ['pending', 'paid', 'cancelled'];
     if (req.body.status && !validStatuses.includes(req.body.status.toLowerCase())) {
       console.error('Invalid status:', req.body.status);
       return res.status(400).json({ message: 'Invalid status. Must be pending, paid, or cancelled.' });
     }
+
+    // ✅ Create booking
     const booking = new Booking({
       ...req.body,
+      food: req.body.food || 0, // new food field
       status: req.body.status ? req.body.status.toLowerCase() : 'pending',
     });
+
     await booking.save();
     console.log('Booking saved:', booking);
+
+    // ✅ Send SMS if status = paid
     if (booking.status === 'paid') {
       console.log('Triggering SMS for new booking:', booking.phone_no);
       await sendBookingSMS(
@@ -119,6 +144,7 @@ router.post('/', async (req, res) => {
       );
       console.log('SMS sent for new booking:', booking._id);
     }
+
     res.status(201).json(booking);
   } catch (err) {
     console.error('Booking creation error:', err.message);
