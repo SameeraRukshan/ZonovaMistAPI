@@ -20,6 +20,12 @@ router.get('/', async (req, res) => {
     
     // Date-based filtering
     switch (filter) {
+      case 'upcoming':
+        // Upcoming check-ins (including today and future)
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        query.checkin_date = { $gte: startOfToday };
+        break;
+        
       case 'recent':
         // Last 7 days bookings
         const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -27,10 +33,10 @@ router.get('/', async (req, res) => {
         break;
         
       case 'today':
-        // Bookings created today
-        const startOfDay = new Date(now.setHours(0, 0, 0, 0));
-        const endOfDay = new Date(now.setHours(23, 59, 59, 999));
-        query.createdAt = { $gte: startOfDay, $lte: endOfDay };
+        // Check-ins today
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+        query.checkin_date = { $gte: todayStart, $lte: todayEnd };
         break;
         
       case 'week':
@@ -45,20 +51,9 @@ router.get('/', async (req, res) => {
         query.createdAt = { $gte: startOfMonth };
         break;
         
-      case 'upcoming':
-        // Upcoming check-ins
-        query.checkin_date = { $gte: new Date() };
-        break;
-        
       case 'past':
         // Past check-outs
         query.checkout_date = { $lt: new Date() };
-        break;
-        
-      case 'active':
-        // Currently checked in
-        query.checkin_date = { $lte: new Date() };
-        query.checkout_date = { $gte: new Date() };
         break;
         
       case 'all':
@@ -90,40 +85,6 @@ router.get('/', async (req, res) => {
     res.json(bookings);
   } catch (err) {
     console.error('❌ Error fetching bookings:', err.message);
-    res.status(500).json({ message: err.message });
-  }
-});
-
-/**
- * GET /bookings/stats - Get booking statistics
- */
-router.get('/stats', async (req, res) => {
-  try {
-    const now = new Date();
-    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    
-    const [total, recent, upcoming, active, pending, paid, cancelled] = await Promise.all([
-      Booking.countDocuments(),
-      Booking.countDocuments({ createdAt: { $gte: sevenDaysAgo } }),
-      Booking.countDocuments({ checkin_date: { $gte: now } }),
-      Booking.countDocuments({ 
-        checkin_date: { $lte: now },
-        checkout_date: { $gte: now }
-      }),
-      Booking.countDocuments({ status: 'pending' }),
-      Booking.countDocuments({ status: 'paid' }),
-      Booking.countDocuments({ status: 'cancelled' })
-    ]);
-    
-    res.json({
-      total,
-      recent,
-      upcoming,
-      active,
-      byStatus: { pending, paid, cancelled }
-    });
-  } catch (err) {
-    console.error('Error fetching stats:', err.message);
     res.status(500).json({ message: err.message });
   }
 });
