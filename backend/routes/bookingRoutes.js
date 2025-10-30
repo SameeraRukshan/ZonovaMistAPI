@@ -5,14 +5,125 @@ const Booking = require('../models/booking');
 const { sendBookingSMS } = require('../models/smsService');
 
 /**
- * GET /bookings - Fetch all bookings
+ * GET /bookings - Fetch bookings with filtering
+ * Query params:
+ * - filter: 'recent' | 'all' | 'today' | 'week' | 'month' | 'upcoming' | 'past'
+ * - status: 'pending' | 'paid' | 'cancelled'
+ * - search: search term for guest name or room number
  */
 router.get('/', async (req, res) => {
   try {
-    const bookings = await Booking.find();
+    const { filter = 'recent', status, search } = req.query;
+    
+    let query = {};
+    const now = new Date();
+    
+    // Date-based filtering
+    switch (filter) {
+      case 'recent':
+        // Last 7 days bookings
+        const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        query.createdAt = { $gte: sevenDaysAgo };
+        break;
+        
+      case 'today':
+        // Bookings created today
+        const startOfDay = new Date(now.setHours(0, 0, 0, 0));
+        const endOfDay = new Date(now.setHours(23, 59, 59, 999));
+        query.createdAt = { $gte: startOfDay, $lte: endOfDay };
+        break;
+        
+      case 'week':
+        // Current week bookings
+        const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
+        query.createdAt = { $gte: startOfWeek };
+        break;
+        
+      case 'month':
+        // Current month bookings
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        query.createdAt = { $gte: startOfMonth };
+        break;
+        
+      case 'upcoming':
+        // Upcoming check-ins
+        query.checkin_date = { $gte: new Date() };
+        break;
+        
+      case 'past':
+        // Past check-outs
+        query.checkout_date = { $lt: new Date() };
+        break;
+        
+      case 'active':
+        // Currently checked in
+        query.checkin_date = { $lte: new Date() };
+        query.checkout_date = { $gte: new Date() };
+        break;
+        
+      case 'all':
+      default:
+        // No date filter
+        break;
+    }
+    
+    // Status filtering
+    if (status && ['pending', 'paid', 'cancelled'].includes(status.toLowerCase())) {
+      query.status = status.toLowerCase();
+    }
+    
+    // Search filtering
+    if (search) {
+      query.$or = [
+        { guest_name: { $regex: search, $options: 'i' } },
+        { booked_room_no: { $regex: search, $options: 'i' } },
+        { phone_no: { $regex: search, $options: 'i' } },
+        { guest_nic: { $regex: search, $options: 'i' } }
+      ];
+    }
+    
+    console.log('📊 Fetching bookings with query:', JSON.stringify(query));
+    
+    const bookings = await Booking.find(query).sort({ createdAt: -1 });
+    
+    console.log(`✅ Found ${bookings.length} bookings`);
     res.json(bookings);
   } catch (err) {
-    console.error('Error fetching bookings:', err.message);
+    console.error('❌ Error fetching bookings:', err.message);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+/**
+ * GET /bookings/stats - Get booking statistics
+ */
+router.get('/stats', async (req, res) => {
+  try {
+    const now = new Date();
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    
+    const [total, recent, upcoming, active, pending, paid, cancelled] = await Promise.all([
+      Booking.countDocuments(),
+      Booking.countDocuments({ createdAt: { $gte: sevenDaysAgo } }),
+      Booking.countDocuments({ checkin_date: { $gte: now } }),
+      Booking.countDocuments({ 
+        checkin_date: { $lte: now },
+        checkout_date: { $gte: now }
+      }),
+      Booking.countDocuments({ status: 'pending' }),
+      Booking.countDocuments({ status: 'paid' }),
+      Booking.countDocuments({ status: 'cancelled' })
+    ]);
+    
+    res.json({
+      total,
+      recent,
+      upcoming,
+      active,
+      byStatus: { pending, paid, cancelled }
+    });
+  } catch (err) {
+    console.error('Error fetching stats:', err.message);
     res.status(500).json({ message: err.message });
   }
 });
