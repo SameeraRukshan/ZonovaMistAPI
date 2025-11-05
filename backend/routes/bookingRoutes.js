@@ -8,7 +8,7 @@ const { sendBookingSMS } = require('../models/smsService');
  * GET /bookings - Fetch bookings with filtering
  * Query params:
  * - filter: 'recent' | 'all' | 'today' | 'week' | 'month' | 'upcoming' | 'past'
- * - status: 'pending' | 'paid' | 'cancelled'
+ * - status: 'pending' | 'paid' | 'cancelled' | 'advance_paid'
  * - search: search term for guest name or room number
  */
 router.get('/', async (req, res) => {
@@ -62,8 +62,8 @@ router.get('/', async (req, res) => {
         break;
     }
     
-    // Status filtering
-    if (status && ['pending', 'paid', 'cancelled'].includes(status.toLowerCase())) {
+    // Status filtering - now includes 'advance_paid'
+    if (status && ['pending', 'paid', 'cancelled', 'advance_paid'].includes(status.toLowerCase())) {
       query.status = status.toLowerCase();
     }
     
@@ -109,7 +109,7 @@ router.post('/', async (req, res) => {
       }
     }
 
-    // ✅ Validate status
+    // ✅ Validate status - now includes 'advance_paid'
     const validStatuses = ['pending', 'paid', 'cancelled', 'advance_paid'];
     if (req.body.status && !validStatuses.includes(req.body.status.toLowerCase())) {
       console.error('Invalid status:', req.body.status);
@@ -168,10 +168,11 @@ router.patch('/:id', async (req, res) => {
       return res.status(404).json({ message: 'Booking not found' });
     }
 
-    const validStatuses = ['pending', 'paid', 'cancelled'];
+    // ✅ Updated to include 'advance_paid'
+    const validStatuses = ['pending', 'paid', 'cancelled', 'advance_paid'];
     if (req.body.status && !validStatuses.includes(req.body.status.toLowerCase())) {
       console.error('Invalid status:', req.body.status);
-      return res.status(400).json({ message: 'Invalid status. Must be pending, paid, or cancelled.' });
+      return res.status(400).json({ message: 'Invalid status. Must be pending, paid, cancelled, or advance_paid.' });
     }
 
     const previousStatus = booking.status;
