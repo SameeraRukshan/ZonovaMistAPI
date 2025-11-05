@@ -110,10 +110,10 @@ router.post('/', async (req, res) => {
     }
 
     // ✅ Validate status
-    const validStatuses = ['pending', 'paid', 'cancelled'];
+    const validStatuses = ['pending', 'paid', 'cancelled', 'advance_paid'];
     if (req.body.status && !validStatuses.includes(req.body.status.toLowerCase())) {
       console.error('Invalid status:', req.body.status);
-      return res.status(400).json({ message: 'Invalid status. Must be pending, paid, or cancelled.' });
+      return res.status(400).json({ message: 'Invalid status. Must be pending, paid, cancelled, or advance_paid.' });
     }
 
     // ✅ Create booking (optional fields safely handled)
