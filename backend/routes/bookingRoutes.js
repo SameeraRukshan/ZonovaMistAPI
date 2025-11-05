@@ -138,8 +138,8 @@ router.post('/', async (req, res) => {
     await booking.save();
     console.log('Booking saved:', booking);
 
-    // ✅ Optional: send SMS if status = paid
-    if (booking.status === 'paid') {
+    // ✅ Optional: send SMS if status = advance_paid or paid
+    if (booking.status === 'advance_paid') {
       console.log('Triggering SMS for new booking:', booking.phone_no);
       await sendBookingSMS(
         booking.phone_no,
@@ -184,7 +184,7 @@ router.patch('/:id', async (req, res) => {
     await booking.save();
     console.log('Booking updated:', booking);
 
-    if (booking.status === 'paid' && previousStatus !== 'paid') {
+    if (booking.status === 'advance_paid' && previousStatus !== 'advance_paid') {
       console.log('Triggering SMS for booking ID:', req.params.id);
       await sendBookingSMS(
         booking.phone_no,
