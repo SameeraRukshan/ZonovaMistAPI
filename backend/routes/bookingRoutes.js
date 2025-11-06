@@ -5,7 +5,7 @@ const Booking = require('../models/booking');
 const { sendBookingSMS } = require('../models/smsService');
 
 /**
- * GET /bookings - Fetch bookings with filtering
+ * GET /bookings - Fetch bookings with filtering and proper sorting
  * Query params:
  * - filter: 'recent' | 'all' | 'today' | 'week' | 'month' | 'upcoming' | 'past'
  * - status: 'pending' | 'paid' | 'cancelled' | 'advance_paid'
@@ -16,20 +16,23 @@ router.get('/', async (req, res) => {
     const { filter = 'recent', status, search } = req.query;
     
     let query = {};
+    let sortOrder = {};
     const now = new Date();
     
-    // Date-based filtering
+    // Date-based filtering with appropriate sorting
     switch (filter) {
       case 'upcoming':
         // Upcoming check-ins (including today and future)
         const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         query.checkin_date = { $gte: startOfToday };
+        sortOrder = { checkin_date: 1 }; // Ascending - soonest first
         break;
         
       case 'recent':
         // Last 7 days bookings
         const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
         query.createdAt = { $gte: sevenDaysAgo };
+        sortOrder = { checkin_date: 1 }; // Ascending - soonest first
         break;
         
       case 'today':
@@ -37,28 +40,33 @@ router.get('/', async (req, res) => {
         const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
         query.checkin_date = { $gte: todayStart, $lte: todayEnd };
+        sortOrder = { checkin_date: 1 }; // Ascending - soonest first
         break;
         
       case 'week':
         // Current week bookings
         const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
         query.createdAt = { $gte: startOfWeek };
+        sortOrder = { checkin_date: 1 }; // Ascending - soonest first
         break;
         
       case 'month':
         // Current month bookings
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
         query.createdAt = { $gte: startOfMonth };
+        sortOrder = { checkin_date: 1 }; // Ascending - soonest first
         break;
         
       case 'past':
         // Past check-outs
         query.checkout_date = { $lt: new Date() };
+        sortOrder = { checkout_date: -1 }; // Descending - most recent first
         break;
         
       case 'all':
       default:
-        // No date filter
+        // All bookings - show upcoming first, then past
+        sortOrder = { checkin_date: -1 }; // Descending - most recent first
         break;
     }
     
@@ -78,8 +86,9 @@ router.get('/', async (req, res) => {
     }
     
     console.log('📊 Fetching bookings with query:', JSON.stringify(query));
+    console.log('📊 Sort order:', JSON.stringify(sortOrder));
     
-    const bookings = await Booking.find(query).sort({ createdAt: -1 });
+    const bookings = await Booking.find(query).sort(sortOrder);
     
     console.log(`✅ Found ${bookings.length} bookings`);
     res.json(bookings);
