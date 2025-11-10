@@ -10,19 +10,26 @@ const Image = require("../models/image");
 const Room = require("../models/room");
 const Hotel = require("../models/hotel");
 const Booking = require("../models/booking");
+const Staff = require("../models/staff"); // ✅ Added Staff model
 
 // ✅ Multer config (memory storage)
 const upload = multer({
   storage: multer.memoryStorage(),
   fileFilter: (req, file, cb) => {
-    const allowedExtensions = /\.(jpg|jpeg|png|webp)$/i;
-    const allowedMimes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+    const allowedExtensions = /\.(jpg|jpeg|png|webp|pdf)$/i;
+    const allowedMimes = [
+      "image/jpeg", 
+      "image/jpg", 
+      "image/png", 
+      "image/webp",
+      "application/pdf" // ✅ Added PDF support for documents
+    ];
 
     if (allowedMimes.includes(file.mimetype) || allowedExtensions.test(file.originalname)) {
       cb(null, true);
     } else {
       console.warn("❌ Rejected file:", file.originalname, "type:", file.mimetype);
-      cb(new Error("Only .jpg, .jpeg, .png, and .webp files are allowed"), false);
+      cb(new Error("Only .jpg, .jpeg, .png, .webp, and .pdf files are allowed"), false);
     }
   },
   limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB max
@@ -40,11 +47,14 @@ async function uploadToCloudinary(fileBuffer, originalName, folderName) {
 
     const publicId = `${baseName}_${Date.now()}`;
 
+    // Detect if it's a PDF
+    const isPDF = originalName.toLowerCase().endsWith('.pdf');
+
     const uploadStream = cloudinary.uploader.upload_stream(
       {
         folder: `zonova_mist/${folderName}`,
         public_id: publicId,
-        resource_type: "image",
+        resource_type: isPDF ? "raw" : "image", // ✅ Handle PDFs
       },
       (error, result) => {
         if (error) return reject(error);
@@ -73,16 +83,22 @@ router.post("/upload", upload.array("photos", 10), async (req, res) => {
       return res.status(400).json({ message: "Invalid moduleId format" });
 
     const normalizedType = String(moduleType).trim();
-    if (!["Room", "Hotel", "Booking"].includes(normalizedType))
-      return res.status(400).json({ message: "Invalid moduleType (Room | Hotel | Booking)" });
+    
+    // ✅ Updated to include Staff
+    if (!["Room", "Hotel", "Booking", "Staff"].includes(normalizedType))
+      return res.status(400).json({ 
+        message: "Invalid moduleType (Room | Hotel | Booking | Staff)" 
+      });
 
-    // ✅ Detect model dynamically
+    // ✅ Detect model dynamically - Added Staff
     const Model =
       normalizedType === "Room"
         ? Room
         : normalizedType === "Hotel"
         ? Hotel
-        : Booking;
+        : normalizedType === "Booking"
+        ? Booking
+        : Staff;
 
     const target = await Model.findById(moduleId);
     if (!target)
@@ -104,7 +120,7 @@ router.post("/upload", upload.array("photos", 10), async (req, res) => {
           moduleId,
           moduleType: normalizedType,
           uploadedBy: uploadedBy || "admin",
-          imageType: imageType || "general", // 👈 NEW FIELD
+          imageType: imageType || "general",
         });
 
         results.push({
@@ -112,6 +128,8 @@ router.post("/upload", upload.array("photos", 10), async (req, res) => {
           public_id: uploaded.public_id,
           dbId: imgDoc._id,
         });
+        
+        console.log(`✅ Uploaded ${file.originalname} for ${normalizedType}`);
       } catch (fileErr) {
         console.error("❌ Error uploading a file:", fileErr);
         results.push({
@@ -137,8 +155,11 @@ router.get("/:moduleType/:moduleId", async (req, res) => {
     const { moduleType, moduleId } = req.params;
     const normalizedType = String(moduleType).trim();
 
-    if (!["Room", "Hotel", "Booking"].includes(normalizedType))
-      return res.status(400).json({ message: "Invalid moduleType" });
+    // ✅ Updated to include Staff
+    if (!["Room", "Hotel", "Booking", "Staff"].includes(normalizedType))
+      return res.status(400).json({ 
+        message: "Invalid moduleType (Room | Hotel | Booking | Staff)" 
+      });
 
     if (!mongoose.Types.ObjectId.isValid(moduleId))
       return res.status(400).json({ message: "Invalid moduleId format" });
@@ -148,6 +169,7 @@ router.get("/:moduleType/:moduleId", async (req, res) => {
       moduleType: normalizedType,
     }).sort({ createdAt: -1 });
 
+    console.log(`✅ Found ${images.length} images for ${normalizedType} ${moduleId}`);
     res.json(images);
   } catch (err) {
     console.error("💥 Fetch images error:", err);
@@ -164,9 +186,13 @@ router.delete("/image", express.json(), async (req, res) => {
     const image = await Image.findOne({ public_id });
     if (!image) return res.status(404).json({ message: "Image not found in DB" });
 
-    await cloudinary.uploader.destroy(public_id);
+    // Determine resource type from public_id or URL
+    const resourceType = image.url.includes('.pdf') ? 'raw' : 'image';
+    
+    await cloudinary.uploader.destroy(public_id, { resource_type: resourceType });
     await image.deleteOne();
 
+    console.log(`✅ Deleted image: ${public_id}`);
     res.json({ message: "Image deleted successfully" });
   } catch (err) {
     console.error("💥 Delete image error:", err);
@@ -181,9 +207,12 @@ router.delete("/:public_id", async (req, res) => {
     const image = await Image.findOne({ public_id: decoded });
     if (!image) return res.status(404).json({ message: "Image not found in DB" });
 
-    await cloudinary.uploader.destroy(decoded);
+    const resourceType = image.url.includes('.pdf') ? 'raw' : 'image';
+    
+    await cloudinary.uploader.destroy(decoded, { resource_type: resourceType });
     await image.deleteOne();
 
+    console.log(`✅ Deleted image: ${decoded}`);
     res.json({ message: "Image deleted successfully" });
   } catch (err) {
     console.error("💥 Param delete error:", err);
