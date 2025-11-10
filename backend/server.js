@@ -41,6 +41,7 @@ app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/images', require('./routes/imageRoutes'));
 app.use('/api/settings', require('./routes/settingsRoutes'));
 app.use('/api/invoices', require('./routes/invoiceRoutes'));
+app.use('/api/staff', require('./routes/staffRoutes')); 
 
 // Swagger
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
@@ -48,8 +49,7 @@ app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 // Root route
 app.get("/", (req, res) => res.send("Backend is running 🚀"));
 
-// Add this route to your server.js file (replace the existing /invoice/:bookingId route)
-
+// Invoice route
 app.get('/invoice/:bookingId', async (req, res) => {
   try {
     const booking = await Booking.findById(req.params.bookingId);
