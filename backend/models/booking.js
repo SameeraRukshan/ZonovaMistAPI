@@ -1,25 +1,41 @@
+// models/booking.js
 const mongoose = require('mongoose');
-const { Schema } = mongoose;
 
-const bookingSchema = new Schema({
-  guest_nic: { type: String, required: false },
+const bookingSchema = new mongoose.Schema({
+  guest_nic: { type: String, default: null },
   guest_name: { type: String, required: true },
   booked_room_no: { type: String, required: true },
   checkin_date: { type: Date, required: true },
   checkout_date: { type: Date, required: true },
   phone_no: { type: String, required: true },
   adult_count: { type: Number, required: true },
-  child_count: { type: Number, required: false },
-  guest_address: { type: String, required: false },
-  total_price: { type: Schema.Types.Decimal128, default: '0' },
-  special_notes: { type: String, required: false, default: '' }, 
-  advance_amount: { type: Schema.Types.Decimal128, default: '0' },
-  status: { type: String, default: 'Pending' },
+  child_count: { type: Number, default: 0 },
+  guest_address: { type: String, default: '' },
+  total_price: { type: Number, default: 0 },
+  special_notes: { type: String, default: '' },
+  advance_amount: { type: Number, default: 0 },
+  birthday: { type: Date, default: null },
+  food: { type: Number, default: 0 },
+  status: {
+    type: String,
+    enum: ['pending', 'paid', 'cancelled', 'advance_paid'],
+    default: 'pending'
+  },
   reminder_sms_sent: { type: Boolean, default: false },
   reminderSmsSentAt: { type: Date, default: null },
-  birthday: { type: Date, required: false },
   birthday_sms_sent: { type: Boolean, default: false },
   birthdaySmsSentAt: { type: Date, default: null },
-}, { timestamps: true });
+  
+  // NEW: Soft delete fields
+  deleted: { type: Boolean, default: false },
+  deletedAt: { type: Date, default: null },
+  deletedBy: { type: String, default: null } // Optional: track who deleted it
+}, {
+  timestamps: true
+});
+
+// Add index for better query performance
+bookingSchema.index({ deleted: 1, checkin_date: 1 });
+bookingSchema.index({ deleted: 1, status: 1 });
 
 module.exports = mongoose.model('Booking', bookingSchema);
