@@ -84,13 +84,13 @@ router.post("/upload", upload.array("photos", 10), async (req, res) => {
 
     const normalizedType = String(moduleType).trim();
     
-    // ✅ Updated to include Staff
-    if (!["Room", "Hotel", "Booking", "Staff"].includes(normalizedType))
+    // ✅ Updated to include Staff and StaffDP
+    if (!["Room", "Hotel", "Booking", "Staff", "StaffDP"].includes(normalizedType))
       return res.status(400).json({ 
-        message: "Invalid moduleType (Room | Hotel | Booking | Staff)" 
+        message: "Invalid moduleType (Room | Hotel | Booking | Staff | StaffDP)" 
       });
 
-    // ✅ Detect model dynamically - Added Staff
+    // ✅ Detect model dynamically - Added Staff (StaffDP uses same Staff model)
     const Model =
       normalizedType === "Room"
         ? Room
@@ -98,7 +98,13 @@ router.post("/upload", upload.array("photos", 10), async (req, res) => {
         ? Hotel
         : normalizedType === "Booking"
         ? Booking
-        : Staff;
+        : normalizedType === "Staff" || normalizedType === "StaffDP"
+        ? Staff
+        : null;
+
+    if (!Model) {
+      return res.status(400).json({ message: "Invalid module type" });
+    }
 
     const target = await Model.findById(moduleId);
     if (!target)
@@ -155,10 +161,10 @@ router.get("/:moduleType/:moduleId", async (req, res) => {
     const { moduleType, moduleId } = req.params;
     const normalizedType = String(moduleType).trim();
 
-    // ✅ Updated to include Staff
-    if (!["Room", "Hotel", "Booking", "Staff"].includes(normalizedType))
+    // ✅ Updated to include Staff and StaffDP
+    if (!["Room", "Hotel", "Booking", "Staff", "StaffDP"].includes(normalizedType))
       return res.status(400).json({ 
-        message: "Invalid moduleType (Room | Hotel | Booking | Staff)" 
+        message: "Invalid moduleType (Room | Hotel | Booking | Staff | StaffDP)" 
       });
 
     if (!mongoose.Types.ObjectId.isValid(moduleId))

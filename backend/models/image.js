@@ -19,7 +19,7 @@ const imageSchema = new mongoose.Schema(
     moduleType: {
       type: String,
       required: true,
-      enum: ["Room", "Hotel", "Booking", "Staff"], // ✅ Added "Staff"
+      enum: ["Room", "Hotel", "Booking", "Staff", "StaffDP"],
     },
     uploadedBy: {
       type: String,
