@@ -10,14 +10,20 @@ const { sendBookingSMS } = require('../models/smsService');
  * - filter: 'recent' | 'all' | 'today' | 'week' | 'month' | 'upcoming' | 'past'
  * - status: 'pending' | 'paid' | 'cancelled' | 'advance_paid'
  * - search: search term for guest name or room number
+ * - includeDeleted: 'true' to include soft-deleted bookings (optional, for admin)
  */
 router.get('/', async (req, res) => {
   try {
-    const { filter = 'recent', status, search } = req.query;
+    const { filter = 'recent', status, search, includeDeleted = 'false' } = req.query;
     
     let query = {};
     let sortOrder = {};
     const now = new Date();
+    
+    // IMPORTANT: Exclude soft-deleted bookings by default
+    if (includeDeleted !== 'true') {
+      query.deleted = { $ne: true }; // or query.deleted = false
+    }
     
     // Date-based filtering with appropriate sorting
     switch (filter) {
@@ -73,6 +79,9 @@ router.get('/', async (req, res) => {
     // Status filtering - now includes 'advance_paid'
     if (status && ['pending', 'paid', 'cancelled', 'advance_paid'].includes(status.toLowerCase())) {
       query.status = status.toLowerCase();
+    } else if (!status || status === 'null' || status === '') {
+      // When no specific status is selected (All Statuses), exclude cancelled
+      query.status = { $ne: 'cancelled' };
     }
     
     // Search filtering
@@ -90,7 +99,7 @@ router.get('/', async (req, res) => {
     
     const bookings = await Booking.find(query).sort(sortOrder);
     
-    console.log(`✅ Found ${bookings.length} bookings`);
+    console.log(`✅ Found ${bookings.length} bookings (deleted excluded: ${includeDeleted !== 'true'})`);
     res.json(bookings);
   } catch (err) {
     console.error('❌ Error fetching bookings:', err.message);
@@ -141,7 +150,8 @@ router.post('/', async (req, res) => {
       advance_amount: req.body.advance_amount || 0,
       birthday: req.body.birthday || null,
       food: req.body.food || 0,
-      status: req.body.status ? req.body.status.toLowerCase() : 'pending'
+      status: req.body.status ? req.body.status.toLowerCase() : 'pending',
+      deleted: false // Explicitly set to false for new bookings
     });
 
     await booking.save();
@@ -175,6 +185,11 @@ router.patch('/:id', async (req, res) => {
     if (!booking) {
       console.error('Booking not found for ID:', req.params.id);
       return res.status(404).json({ message: 'Booking not found' });
+    }
+
+    // Prevent updating deleted bookings
+    if (booking.deleted) {
+      return res.status(400).json({ message: 'Cannot update a deleted booking' });
     }
 
     // ✅ Updated to include 'advance_paid'
@@ -212,19 +227,85 @@ router.patch('/:id', async (req, res) => {
 });
 
 /**
- * DELETE /bookings/:id - Delete a booking
+ * DELETE /bookings/:id - Soft delete a booking
  */
 router.delete('/:id', async (req, res) => {
+  try {
+    const booking = await Booking.findById(req.params.id);
+    if (!booking) {
+      console.error('Booking not found for ID:', req.params.id);
+      return res.status(404).json({ message: 'Booking not found' });
+    }
+
+    // Check if already deleted
+    if (booking.deleted) {
+      return res.status(400).json({ message: 'Booking is already deleted' });
+    }
+
+    // Soft delete: mark as deleted instead of removing from database
+    booking.deleted = true;
+    booking.deletedAt = new Date();
+    // Optional: if you have user authentication, track who deleted it
+    // booking.deletedBy = req.user?.id || 'unknown';
+
+    await booking.save();
+    console.log('Booking soft deleted:', booking._id);
+    
+    res.json({ 
+      message: 'Booking deleted successfully',
+      booking: booking 
+    });
+  } catch (err) {
+    console.error('Booking deletion error:', err.message);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+/**
+ * POST /bookings/:id/restore - Restore a soft-deleted booking (optional)
+ */
+router.post('/:id/restore', async (req, res) => {
+  try {
+    const booking = await Booking.findById(req.params.id);
+    if (!booking) {
+      return res.status(404).json({ message: 'Booking not found' });
+    }
+
+    if (!booking.deleted) {
+      return res.status(400).json({ message: 'Booking is not deleted' });
+    }
+
+    booking.deleted = false;
+    booking.deletedAt = null;
+    booking.deletedBy = null;
+
+    await booking.save();
+    console.log('Booking restored:', booking._id);
+    
+    res.json({ 
+      message: 'Booking restored successfully',
+      booking: booking 
+    });
+  } catch (err) {
+    console.error('Booking restoration error:', err.message);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+/**
+ * DELETE /bookings/:id/permanent - Permanently delete a booking (optional, admin only)
+ */
+router.delete('/:id/permanent', async (req, res) => {
   try {
     const booking = await Booking.findByIdAndDelete(req.params.id);
     if (!booking) {
       console.error('Booking not found for ID:', req.params.id);
       return res.status(404).json({ message: 'Booking not found' });
     }
-    console.log('Booking deleted:', booking);
-    res.json({ message: 'Booking deleted successfully' });
+    console.log('Booking permanently deleted:', booking._id);
+    res.json({ message: 'Booking permanently deleted' });
   } catch (err) {
-    console.error('Booking deletion error:', err.message);
+    console.error('Booking permanent deletion error:', err.message);
     res.status(500).json({ message: err.message });
   }
 });
