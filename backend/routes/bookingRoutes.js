@@ -148,10 +148,8 @@ router.post('/', async (req, res) => {
     if (booking.status === 'advance_paid') {
       console.log('📨 Triggering advance paid SMS for new booking');
       
-      // Get base URL from environment
-      const baseUrl = process.env.BASE_URL || 
-                      process.env.BACKEND_URL || 
-                      `http://localhost:${process.env.PORT || 3000}`;
+      // Get base URL from environment - use production URL
+      const baseUrl = process.env.BASE_URL || 'https://zonova-mist.onrender.com';
       
       const invoiceLink = `${baseUrl}/invoice/${booking._id}`;
       
