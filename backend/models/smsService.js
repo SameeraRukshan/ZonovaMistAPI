@@ -9,7 +9,9 @@ function replacePlaceholders(template, data) {
     .replace('{roomNo}', data.roomNo || '')
     .replace('{checkInDate}', data.checkInDate ? new Date(data.checkInDate).toDateString() : '')
     .replace('{guestHouseName}', data.guestHouseName || '')
-    .replace('{hostName}', data.hostName || '');
+    .replace('{hostName}', data.hostName || '')
+    .replace('{advanceAmount}', data.advanceAmount || '')
+    .replace('{invoiceLink}', data.invoiceLink || '');
   console.log('Resulting message:', result);
   return result;
 }
@@ -53,6 +55,55 @@ async function sendBookingSMS(clientPhone, clientName, roomNo, checkInDate) {
     return response.data;
   } catch (err) {
     console.error('Error sending booking SMS:', err.message, err.stack);
+    throw err;
+  }
+}
+
+// NEW: Send advance paid SMS with invoice link
+async function sendAdvancePaidSMS(clientPhone, clientName, roomNo, advanceAmount, invoiceLink) {
+  try {
+    console.log('📨 Sending advance paid SMS with invoice link...');
+    const settings = await Setting.findOne({});
+    if (!settings) {
+      console.error('No settings found in database');
+      throw new Error('Settings not found in database');
+    }
+
+    const userId = process.env.USER_ID;
+    const apiKey = process.env.API_KEY;
+    if (!userId || !apiKey) {
+      console.error('Missing USER_ID or API_KEY');
+      throw new Error('Missing Notify.lk credentials');
+    }
+
+    const senderId = settings.guestHouseName || 'Zonova Mist';
+    
+    // Use the advance paid template from settings
+    const template = settings.advancePaidSmsTemplate || 
+      'Dear {clientName}, advance payment of Rs. {advanceAmount} received for Room {roomNo}. View invoice: {invoiceLink} - {guestHouseName}';
+    
+    const message = replacePlaceholders(template, {
+      clientName,
+      roomNo,
+      advanceAmount: advanceAmount ? parseFloat(advanceAmount).toFixed(2) : '0.00',
+      invoiceLink,
+      guestHouseName: settings.guestHouseName,
+      hostName: settings.hostName,
+    });
+
+    const params = new URLSearchParams();
+    params.append('user_id', userId);
+    params.append('api_key', apiKey);
+    params.append('sender_id', senderId);
+    params.append('to', clientPhone);
+    params.append('message', message);
+
+    console.log('📤 Sending advance paid SMS:', message);
+    const response = await axios.post('https://app.notify.lk/api/v1/send', params.toString());
+    console.log('✅ Advance paid SMS sent:', response.data);
+    return response.data;
+  } catch (err) {
+    console.error('❌ Error sending advance paid SMS:', err.message, err.stack);
     throw err;
   }
 }
@@ -199,4 +250,10 @@ async function sendInvoiceSMS(clientPhone, message) {
   }
 }
 
-module.exports = { sendBookingSMS, sendReminderSMS, sendBirthdaySMS, sendInvoiceSMS };
+module.exports = { 
+  sendBookingSMS, 
+  sendReminderSMS, 
+  sendBirthdaySMS, 
+  sendInvoiceSMS,
+  sendAdvancePaidSMS  // Export the new function
+};
