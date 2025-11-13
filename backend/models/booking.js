@@ -26,16 +26,21 @@ const bookingSchema = new mongoose.Schema({
   birthday_sms_sent: { type: Boolean, default: false },
   birthdaySmsSentAt: { type: Date, default: null },
   
-  // NEW: Soft delete fields
+  // NEW: Discount SMS tracking
+  discount_sms_sent: { type: Boolean, default: false },
+  discountSmsSentAt: { type: Date, default: null },
+  
+  // Soft delete fields
   deleted: { type: Boolean, default: false },
   deletedAt: { type: Date, default: null },
-  deletedBy: { type: String, default: null } // Optional: track who deleted it
+  deletedBy: { type: String, default: null }
 }, {
   timestamps: true
 });
 
-// Add index for better query performance
+// Add indexes for better query performance
 bookingSchema.index({ deleted: 1, checkin_date: 1 });
 bookingSchema.index({ deleted: 1, status: 1 });
+bookingSchema.index({ deleted: 1, checkout_date: 1, discount_sms_sent: 1 }); // NEW: For discount job
 
 module.exports = mongoose.model('Booking', bookingSchema);

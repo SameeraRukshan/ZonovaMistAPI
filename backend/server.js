@@ -491,4 +491,7 @@ server.listen(PORT, '0.0.0.0', () => {
 });
 
 // Include any additional jobs
+console.log('⏰ Initializing cron jobs...');
+require('./jobs/discountJob');
 require('./jobs/reminderJob');
+console.log('✅ Cron jobs initialized');

@@ -322,4 +322,116 @@ router.delete('/:id/permanent', async (req, res) => {
   }
 });
 
+/**
+ * POST /bookings/send-discount-sms-test - Test endpoint to manually trigger discount SMS
+ * For testing purposes only
+ */
+router.post('/send-discount-sms-test', async (req, res) => {
+  try {
+    const { bookingId } = req.body;
+    
+    if (!bookingId) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Booking ID is required' 
+      });
+    }
+    
+    const booking = await Booking.findById(bookingId);
+    
+    if (!booking) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Booking not found' 
+      });
+    }
+    
+    // Check if already sent
+    if (booking.discount_sms_sent) {
+      console.log('⚠️ Discount SMS already sent to this booking');
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Discount SMS already sent to this booking',
+        sentAt: booking.discountSmsSentAt
+      });
+    }
+    
+    console.log(`📨 Test: Sending discount SMS to ${booking.guest_name} (${booking.phone_no})`);
+    
+    // Import the function at the top of the file
+    const { sendDiscountSMS } = require('../models/smsService');
+    
+    await sendDiscountSMS(booking.phone_no, booking.guest_name);
+    
+    // Mark as sent
+    booking.discount_sms_sent = true;
+    booking.discountSmsSentAt = new Date();
+    await booking.save();
+    
+    console.log('✅ Test discount SMS sent successfully');
+    
+    res.json({ 
+      success: true, 
+      message: 'Discount SMS sent successfully',
+      booking: {
+        id: booking._id,
+        guest_name: booking.guest_name,
+        phone_no: booking.phone_no,
+        discount_sms_sent: booking.discount_sms_sent,
+        discountSmsSentAt: booking.discountSmsSentAt
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error sending test discount SMS:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+/**
+ * GET /bookings/eligible-for-discount - Get list of bookings eligible for discount SMS
+ * For testing and monitoring
+ */
+router.get('/eligible-for-discount', async (req, res) => {
+  try {
+    const Setting = require('../models/settings');
+    const settings = await Setting.findOne({});
+    const daysAfterCheckout = settings?.discountSmsDaysAfterCheckout || 10;
+    
+    const targetDate = new Date();
+    targetDate.setDate(targetDate.getDate() - daysAfterCheckout);
+    
+    const startOfTargetDay = new Date(targetDate.setHours(0, 0, 0, 0));
+    const endOfTargetDay = new Date(targetDate.setHours(23, 59, 59, 999));
+    
+    const eligibleBookings = await Booking.find({
+      checkout_date: {
+        $gte: startOfTargetDay,
+        $lte: endOfTargetDay
+      },
+      status: 'paid',
+      deleted: { $ne: true },
+      discount_sms_sent: { $ne: true }
+    }).select('guest_name phone_no checkout_date status discount_sms_sent');
+    
+    res.json({
+      success: true,
+      daysAfterCheckout,
+      targetDate: startOfTargetDay,
+      count: eligibleBookings.length,
+      bookings: eligibleBookings
+    });
+    
+  } catch (error) {
+    console.error('❌ Error fetching eligible bookings:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
 module.exports = router;
