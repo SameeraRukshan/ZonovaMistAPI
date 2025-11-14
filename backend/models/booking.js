@@ -1,6 +1,15 @@
 // models/booking.js
 const mongoose = require('mongoose');
 
+const recordingSchema = new mongoose.Schema({
+  filename: { type: String, required: true },
+  url: { type: String, required: true },
+  cloudinary_id: { type: String, required: true },
+  fileSize: { type: Number }, // in bytes
+  mimeType: { type: String }, // e.g., 'audio/mpeg'
+  uploadedAt: { type: Date, default: Date.now }
+});
+
 const bookingSchema = new mongoose.Schema({
   guest_nic: { type: String, default: null },
   guest_name: { type: String, required: true },
@@ -26,9 +35,12 @@ const bookingSchema = new mongoose.Schema({
   birthday_sms_sent: { type: Boolean, default: false },
   birthdaySmsSentAt: { type: Date, default: null },
   
-  // NEW: Discount SMS tracking
+  // Discount SMS tracking
   discount_sms_sent: { type: Boolean, default: false },
   discountSmsSentAt: { type: Date, default: null },
+  
+  // NEW: Audio recordings
+  recordings: [recordingSchema],
   
   // Soft delete fields
   deleted: { type: Boolean, default: false },
@@ -41,6 +53,6 @@ const bookingSchema = new mongoose.Schema({
 // Add indexes for better query performance
 bookingSchema.index({ deleted: 1, checkin_date: 1 });
 bookingSchema.index({ deleted: 1, status: 1 });
-bookingSchema.index({ deleted: 1, checkout_date: 1, discount_sms_sent: 1 }); // NEW: For discount job
+bookingSchema.index({ deleted: 1, checkout_date: 1, discount_sms_sent: 1 });
 
 module.exports = mongoose.model('Booking', bookingSchema);
