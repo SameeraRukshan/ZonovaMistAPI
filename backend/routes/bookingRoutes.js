@@ -3,6 +3,9 @@ const express = require('express');
 const router = express.Router();
 const Booking = require('../models/booking');
 const { sendBookingSMS, sendAdvancePaidSMS } = require('../models/smsService');
+const multer = require('multer');
+const cloudinary = require('../config/cloudinary');
+const { Readable } = require('stream');
 
 /**
  * GET /bookings - Fetch bookings with filtering and proper sorting
@@ -427,6 +430,201 @@ router.get('/eligible-for-discount', async (req, res) => {
     
   } catch (error) {
     console.error('❌ Error fetching eligible bookings:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 25 * 1024 * 1024, // 25MB max file size
+  },
+  fileFilter: (req, file, cb) => {
+    // Accept only audio files
+    const allowedMimes = ['audio/mpeg', 'audio/mp4', 'audio/x-m4a', 'audio/wav', 'audio/m4a'];
+    const allowedExts = ['.mp3', '.m4a', '.wav'];
+    
+    const ext = file.originalname.toLowerCase().substring(file.originalname.lastIndexOf('.'));
+    
+    if (allowedMimes.includes(file.mimetype) || allowedExts.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only .mp3, .m4a, and .wav files are allowed.'));
+    }
+  }
+});
+
+/**
+ * POST /bookings/:id/recordings - Upload audio recording
+ */
+router.post('/:id/recordings', upload.single('audio'), async (req, res) => {
+  try {
+    const bookingId = req.params.id;
+    
+    if (!req.file) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'No audio file provided' 
+      });
+    }
+
+    const booking = await Booking.findById(bookingId);
+    if (!booking) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Booking not found' 
+      });
+    }
+
+    // Check if booking already has 10 recordings
+    if (booking.recordings && booking.recordings.length >= 10) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Maximum 10 recordings per booking allowed' 
+      });
+    }
+
+    console.log(`📤 Uploading recording for booking ${bookingId}`);
+    console.log(`📁 File: ${req.file.originalname}, Size: ${req.file.size} bytes`);
+
+    // Upload to Cloudinary
+    const uploadResult = await new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: 'zonova_mist/recordings',
+          resource_type: 'auto',
+          format: req.file.originalname.split('.').pop(), // Preserve original format
+        },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        }
+      );
+
+      // Create a readable stream from buffer
+      const bufferStream = Readable.from(req.file.buffer);
+      bufferStream.pipe(uploadStream);
+    });
+
+    console.log(`✅ Uploaded to Cloudinary: ${uploadResult.secure_url}`);
+
+    // Add recording to booking
+    const newRecording = {
+      filename: req.file.originalname,
+      url: uploadResult.secure_url,
+      cloudinary_id: uploadResult.public_id,
+      fileSize: req.file.size,
+      mimeType: req.file.mimetype,
+      uploadedAt: new Date()
+    };
+
+    if (!booking.recordings) {
+      booking.recordings = [];
+    }
+    booking.recordings.push(newRecording);
+    
+    await booking.save();
+
+    console.log(`✅ Recording saved to booking ${bookingId}`);
+
+    res.json({
+      success: true,
+      message: 'Recording uploaded successfully',
+      recording: newRecording
+    });
+
+  } catch (error) {
+    console.error('❌ Error uploading recording:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+/**
+ * DELETE /bookings/:id/recordings/:recordingId - Delete audio recording
+ */
+router.delete('/:id/recordings/:recordingId', async (req, res) => {
+  try {
+    const { id: bookingId, recordingId } = req.params;
+
+    const booking = await Booking.findById(bookingId);
+    if (!booking) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Booking not found' 
+      });
+    }
+
+    // Find the recording
+    const recording = booking.recordings.id(recordingId);
+    if (!recording) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Recording not found' 
+      });
+    }
+
+    console.log(`🗑️ Deleting recording ${recordingId} from booking ${bookingId}`);
+    console.log(`☁️ Cloudinary ID: ${recording.cloudinary_id}`);
+
+    // Delete from Cloudinary
+    try {
+      await cloudinary.uploader.destroy(recording.cloudinary_id, {
+        resource_type: 'video' // Cloudinary treats audio as 'video' resource type
+      });
+      console.log(`✅ Deleted from Cloudinary: ${recording.cloudinary_id}`);
+    } catch (cloudinaryError) {
+      console.error('⚠️ Error deleting from Cloudinary:', cloudinaryError.message);
+      // Continue with database deletion even if Cloudinary delete fails
+    }
+
+    // Remove from booking
+    booking.recordings.pull(recordingId);
+    await booking.save();
+
+    console.log(`✅ Recording removed from booking ${bookingId}`);
+
+    res.json({
+      success: true,
+      message: 'Recording deleted successfully'
+    });
+
+  } catch (error) {
+    console.error('❌ Error deleting recording:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+/**
+ * GET /bookings/:id/recordings - Get all recordings for a booking
+ */
+router.get('/:id/recordings', async (req, res) => {
+  try {
+    const bookingId = req.params.id;
+
+    const booking = await Booking.findById(bookingId).select('recordings');
+    if (!booking) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Booking not found' 
+      });
+    }
+
+    res.json({
+      success: true,
+      recordings: booking.recordings || []
+    });
+
+  } catch (error) {
+    console.error('❌ Error fetching recordings:', error);
     res.status(500).json({ 
       success: false, 
       error: error.message 
