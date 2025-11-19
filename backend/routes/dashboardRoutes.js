@@ -302,7 +302,7 @@ router.get('/revenue-comparison', async (req, res) => {
         label: timePeriod === 'year' 
           ? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][item._id - 1]
           : item._id.toString(),
-        value: item.total,
+        value: parseFloat(item.total.toString()), // Convert Decimal128 to number
         date: item.date
       }));
       
@@ -441,7 +441,11 @@ function fillMissingDates(dataPoints, dateRange, timePeriod) {
     }
   }
   
-  return filled;
+  // Ensure all values are plain numbers
+  return filled.map(item => ({
+    ...item,
+    value: typeof item.value === 'number' ? item.value : parseFloat(item.value.toString())
+  }));
 }
 
 module.exports = router;
