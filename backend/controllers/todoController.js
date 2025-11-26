@@ -1,9 +1,13 @@
 const Todo = require('../models/todo');
+const cloudinary = require('../config/cloudinary');
 
-// Get all todos (not deleted)
+// Get all todos created by logged in user
 exports.getAllTodos = async (req, res) => {
   try {
-    const todos = await Todo.find({ deleted: false })
+    const todos = await Todo.find({ 
+      createdBy: req.user.id,
+      deleted: false 
+    })
       .populate('assignedTo', 'fullName email')
       .populate('createdBy', 'fullName email')
       .sort({ createdDate: -1 });
@@ -15,7 +19,25 @@ exports.getAllTodos = async (req, res) => {
   }
 };
 
-// Get todos by assignedTo user
+// Get todos assigned to logged in user (My Todos)
+exports.getMyTodos = async (req, res) => {
+  try {
+    const todos = await Todo.find({ 
+      assignedTo: req.user.id,
+      deleted: false 
+    })
+      .populate('assignedTo', 'fullName email')
+      .populate('createdBy', 'fullName email')
+      .sort({ createdDate: -1 });
+    
+    res.status(200).json({ success: true, todos });
+  } catch (error) {
+    console.error('Error fetching my todos:', error);
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+// Get todos by user
 exports.getTodosByUser = async (req, res) => {
   try {
     const { userId } = req.params;
@@ -61,7 +83,6 @@ exports.createTodo = async (req, res) => {
   try {
     const { title, description, dueDate, priority, assignedTo } = req.body;
     
-    // Validate required fields
     if (!title || !assignedTo) {
       return res.status(400).json({ 
         success: false, 
@@ -75,12 +96,12 @@ exports.createTodo = async (req, res) => {
       dueDate: dueDate || new Date(),
       priority: priority || 'Medium',
       assignedTo,
-      createdBy: req.user.id // From auth middleware
+      createdBy: req.user.id,
+      status: 'New'
     });
     
     await todo.save();
     
-    // Populate before sending response
     await todo.populate('assignedTo', 'fullName email');
     await todo.populate('createdBy', 'fullName email');
     
@@ -101,10 +122,10 @@ exports.updateTodo = async (req, res) => {
     const { id } = req.params;
     const updates = req.body;
     
-    // Don't allow updating these fields
     delete updates.createdBy;
     delete updates.createdDate;
     delete updates.deleted;
+    delete updates.images;
     
     const todo = await Todo.findOneAndUpdate(
       { _id: id, deleted: false },
@@ -129,19 +150,42 @@ exports.updateTodo = async (req, res) => {
   }
 };
 
-// Mark todo as completed/incomplete
-exports.toggleTodoComplete = async (req, res) => {
+// Complete todo with images
+exports.completeTodo = async (req, res) => {
   try {
     const { id } = req.params;
     
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'At least one image is required to complete the todo' 
+      });
+    }
+
     const todo = await Todo.findOne({ _id: id, deleted: false });
     
     if (!todo) {
       return res.status(404).json({ success: false, message: 'Todo not found' });
     }
+
+    // Upload images to Cloudinary
+    const uploadPromises = req.files.map(file => 
+      cloudinary.uploader.upload(file.path, {
+        folder: 'todos',
+      })
+    );
+
+    const uploadResults = await Promise.all(uploadPromises);
     
-    todo.completed = !todo.completed;
-    todo.completedAt = todo.completed ? new Date() : null;
+    // Add images to todo
+    const images = uploadResults.map(result => ({
+      url: result.secure_url,
+      public_id: result.public_id
+    }));
+
+    todo.images.push(...images);
+    todo.status = 'Completed';
+    todo.completedAt = new Date();
     
     await todo.save();
     await todo.populate('assignedTo', 'fullName email');
@@ -149,11 +193,88 @@ exports.toggleTodoComplete = async (req, res) => {
     
     res.status(200).json({ 
       success: true, 
-      message: `Todo marked as ${todo.completed ? 'completed' : 'incomplete'}`, 
+      message: 'Todo completed successfully', 
       todo 
     });
   } catch (error) {
-    console.error('Error toggling todo completion:', error);
+    console.error('Error completing todo:', error);
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+// Approve todo
+exports.approveTodo = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const todo = await Todo.findOneAndUpdate(
+      { _id: id, deleted: false, status: 'Completed' },
+      { 
+        status: 'Approved',
+        approvedAt: new Date()
+      },
+      { new: true }
+    )
+      .populate('assignedTo', 'fullName email')
+      .populate('createdBy', 'fullName email');
+    
+    if (!todo) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Todo not found or not in Completed status' 
+      });
+    }
+    
+    res.status(200).json({ 
+      success: true, 
+      message: 'Todo approved successfully', 
+      todo 
+    });
+  } catch (error) {
+    console.error('Error approving todo:', error);
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+// Reject todo (set back to New)
+exports.rejectTodo = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const todo = await Todo.findOneAndUpdate(
+      { _id: id, deleted: false, status: 'Completed' },
+      { 
+        status: 'New',
+        completedAt: null,
+        images: [] // Clear images on reject
+      },
+      { new: true }
+    )
+      .populate('assignedTo', 'fullName email')
+      .populate('createdBy', 'fullName email');
+    
+    if (!todo) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Todo not found or not in Completed status' 
+      });
+    }
+
+    // Delete images from Cloudinary
+    if (todo.images && todo.images.length > 0) {
+      const deletePromises = todo.images.map(img => 
+        cloudinary.uploader.destroy(img.public_id)
+      );
+      await Promise.all(deletePromises);
+    }
+    
+    res.status(200).json({ 
+      success: true, 
+      message: 'Todo rejected and reset to New', 
+      todo 
+    });
+  } catch (error) {
+    console.error('Error rejecting todo:', error);
     res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 };
@@ -168,7 +289,7 @@ exports.deleteTodo = async (req, res) => {
       { 
         deleted: true, 
         deletedAt: new Date(),
-        deletedBy: req.user.id // From auth middleware
+        deletedBy: req.user.id
       },
       { new: true }
     );
@@ -183,27 +304,6 @@ exports.deleteTodo = async (req, res) => {
     });
   } catch (error) {
     console.error('Error deleting todo:', error);
-    res.status(500).json({ success: false, message: 'Server error', error: error.message });
-  }
-};
-
-// Permanently delete todo (optional - admin only)
-exports.permanentDeleteTodo = async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    const todo = await Todo.findByIdAndDelete(id);
-    
-    if (!todo) {
-      return res.status(404).json({ success: false, message: 'Todo not found' });
-    }
-    
-    res.status(200).json({ 
-      success: true, 
-      message: 'Todo permanently deleted' 
-    });
-  } catch (error) {
-    console.error('Error permanently deleting todo:', error);
     res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 };
