@@ -1,16 +1,41 @@
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
 const {
   getAllTodos,
+  getMyTodos,
   getTodosByUser,
   getTodoById,
   createTodo,
   updateTodo,
-  toggleTodoComplete,
-  deleteTodo,
-  permanentDeleteTodo
+  completeTodo,
+  approveTodo,
+  rejectTodo,
+  deleteTodo
 } = require('../controllers/todoController');
 const verifyToken = require('../middleware/authMiddleware');
+
+// Multer configuration for image uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'uploads/');
+  },
+  filename: (req, file, cb) => {
+    cb(null, `${Date.now()}-${file.originalname}`);
+  }
+});
+
+const upload = multer({ 
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed'));
+    }
+  }
+});
 
 // All routes require authentication
 router.use(verifyToken);
@@ -19,19 +44,23 @@ router.use(verifyToken);
  * @swagger
  * /todos:
  *   get:
- *     summary: Get all todos
+ *     summary: Get all todos created by logged-in user
  *     tags: [Todos]
  *     security:
  *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: List of all todos
- *       401:
- *         description: Unauthorized
- *       500:
- *         description: Server error
  */
 router.get('/', getAllTodos);
+
+/**
+ * @swagger
+ * /todos/my:
+ *   get:
+ *     summary: Get todos assigned to logged-in user
+ *     tags: [Todos]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get('/my', getMyTodos);
 
 /**
  * @swagger
@@ -41,20 +70,6 @@ router.get('/', getAllTodos);
  *     tags: [Todos]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: userId
- *         required: true
- *         schema:
- *           type: string
- *         description: User ID to get todos for
- *     responses:
- *       200:
- *         description: List of user's todos
- *       401:
- *         description: Unauthorized
- *       500:
- *         description: Server error
  */
 router.get('/user/:userId', getTodosByUser);
 
@@ -66,22 +81,6 @@ router.get('/user/:userId', getTodosByUser);
  *     tags: [Todos]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *         description: Todo ID
- *     responses:
- *       200:
- *         description: Todo details
- *       404:
- *         description: Todo not found
- *       401:
- *         description: Unauthorized
- *       500:
- *         description: Server error
  */
 router.get('/:id', getTodoById);
 
@@ -93,42 +92,6 @@ router.get('/:id', getTodoById);
  *     tags: [Todos]
  *     security:
  *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - title
- *               - assignedTo
- *             properties:
- *               title:
- *                 type: string
- *                 example: "Complete project documentation"
- *               description:
- *                 type: string
- *                 example: "Write comprehensive API documentation"
- *               dueDate:
- *                 type: string
- *                 format: date
- *                 example: "2025-11-25"
- *               priority:
- *                 type: string
- *                 enum: [High, Medium, Low]
- *                 example: "High"
- *               assignedTo:
- *                 type: string
- *                 example: "64a1234b56c7890d1234ef56"
- *     responses:
- *       201:
- *         description: Todo created successfully
- *       400:
- *         description: Validation error
- *       401:
- *         description: Unauthorized
- *       500:
- *         description: Server error
  */
 router.post('/', createTodo);
 
@@ -140,70 +103,41 @@ router.post('/', createTodo);
  *     tags: [Todos]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *         description: Todo ID
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               title:
- *                 type: string
- *               description:
- *                 type: string
- *               dueDate:
- *                 type: string
- *                 format: date
- *               priority:
- *                 type: string
- *                 enum: [High, Medium, Low]
- *               assignedTo:
- *                 type: string
- *     responses:
- *       200:
- *         description: Todo updated successfully
- *       404:
- *         description: Todo not found
- *       401:
- *         description: Unauthorized
- *       500:
- *         description: Server error
  */
 router.put('/:id', updateTodo);
 
 /**
  * @swagger
- * /todos/{id}/toggle:
- *   patch:
- *     summary: Toggle todo completion status
+ * /todos/{id}/complete:
+ *   post:
+ *     summary: Complete todo with images
  *     tags: [Todos]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *         description: Todo ID
- *     responses:
- *       200:
- *         description: Todo completion status toggled
- *       404:
- *         description: Todo not found
- *       401:
- *         description: Unauthorized
- *       500:
- *         description: Server error
  */
-router.patch('/:id/toggle', toggleTodoComplete);
+router.post('/:id/complete', upload.array('images', 10), completeTodo);
+
+/**
+ * @swagger
+ * /todos/{id}/approve:
+ *   patch:
+ *     summary: Approve a completed todo
+ *     tags: [Todos]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.patch('/:id/approve', approveTodo);
+
+/**
+ * @swagger
+ * /todos/{id}/reject:
+ *   patch:
+ *     summary: Reject a completed todo
+ *     tags: [Todos]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.patch('/:id/reject', rejectTodo);
 
 /**
  * @swagger
@@ -213,50 +147,7 @@ router.patch('/:id/toggle', toggleTodoComplete);
  *     tags: [Todos]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *         description: Todo ID
- *     responses:
- *       200:
- *         description: Todo deleted successfully
- *       404:
- *         description: Todo not found
- *       401:
- *         description: Unauthorized
- *       500:
- *         description: Server error
  */
 router.delete('/:id', deleteTodo);
-
-/**
- * @swagger
- * /todos/{id}/permanent:
- *   delete:
- *     summary: Permanently delete a todo (admin only)
- *     tags: [Todos]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *         description: Todo ID
- *     responses:
- *       200:
- *         description: Todo permanently deleted
- *       404:
- *         description: Todo not found
- *       401:
- *         description: Unauthorized
- *       500:
- *         description: Server error
- */
-router.delete('/:id/permanent', permanentDeleteTodo);
 
 module.exports = router;

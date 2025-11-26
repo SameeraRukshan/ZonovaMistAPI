@@ -1,5 +1,10 @@
 const mongoose = require('mongoose');
 
+const imageSchema = new mongoose.Schema({
+  url: { type: String, required: true },
+  public_id: { type: String, required: true }
+});
+
 const todoSchema = new mongoose.Schema({
   title: { 
     type: String, 
@@ -13,7 +18,7 @@ const todoSchema = new mongoose.Schema({
   },
   dueDate: { 
     type: Date, 
-    default: () => new Date() // Default to today
+    default: () => new Date()
   },
   priority: { 
     type: String, 
@@ -25,6 +30,12 @@ const todoSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  status: {
+    type: String,
+    enum: ['New', 'Completed', 'Approved'],
+    default: 'New'
+  },
+  images: [imageSchema],
   createdBy: { 
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -34,12 +45,11 @@ const todoSchema = new mongoose.Schema({
     type: Date, 
     default: Date.now
   },
-  // Additional useful fields
-  completed: {
-    type: Boolean,
-    default: false
-  },
   completedAt: {
+    type: Date,
+    default: null
+  },
+  approvedAt: {
     type: Date,
     default: null
   },
@@ -65,5 +75,6 @@ todoSchema.index({ deleted: 1, assignedTo: 1 });
 todoSchema.index({ deleted: 1, createdBy: 1 });
 todoSchema.index({ deleted: 1, dueDate: 1 });
 todoSchema.index({ deleted: 1, priority: 1 });
+todoSchema.index({ deleted: 1, status: 1 });
 
 module.exports = mongoose.model('Todo', todoSchema);
