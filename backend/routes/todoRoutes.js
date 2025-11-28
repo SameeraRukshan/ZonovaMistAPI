@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
+const path = require('path');
 const {
   getAllTodos,
   getMyTodos,
@@ -21,7 +22,8 @@ const storage = multer.diskStorage({
     cb(null, 'uploads/');
   },
   filename: (req, file, cb) => {
-    cb(null, `${Date.now()}-${file.originalname}`);
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'todo-' + uniqueSuffix + path.extname(file.originalname));
   }
 });
 
@@ -29,9 +31,21 @@ const upload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
   fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
+    console.log('File received:', {
+      fieldname: file.fieldname,
+      originalname: file.originalname,
+      mimetype: file.mimetype,
+      size: file.size
+    });
+    
+    // Accept all image types and don't validate MIME type too strictly
+    const ext = path.extname(file.originalname).toLowerCase();
+    const allowedExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+    
+    if (file.mimetype.startsWith('image/') || allowedExts.includes(ext)) {
       cb(null, true);
     } else {
+      console.error('Invalid file type:', file.mimetype, 'ext:', ext);
       cb(new Error('Only image files are allowed'));
     }
   }
@@ -40,114 +54,15 @@ const upload = multer({
 // All routes require authentication
 router.use(verifyToken);
 
-/**
- * @swagger
- * /todos:
- *   get:
- *     summary: Get all todos created by logged-in user
- *     tags: [Todos]
- *     security:
- *       - bearerAuth: []
- */
 router.get('/', getAllTodos);
-
-/**
- * @swagger
- * /todos/my:
- *   get:
- *     summary: Get todos assigned to logged-in user
- *     tags: [Todos]
- *     security:
- *       - bearerAuth: []
- */
 router.get('/my', getMyTodos);
-
-/**
- * @swagger
- * /todos/user/{userId}:
- *   get:
- *     summary: Get todos by assigned user
- *     tags: [Todos]
- *     security:
- *       - bearerAuth: []
- */
 router.get('/user/:userId', getTodosByUser);
-
-/**
- * @swagger
- * /todos/{id}:
- *   get:
- *     summary: Get single todo by ID
- *     tags: [Todos]
- *     security:
- *       - bearerAuth: []
- */
 router.get('/:id', getTodoById);
-
-/**
- * @swagger
- * /todos:
- *   post:
- *     summary: Create a new todo
- *     tags: [Todos]
- *     security:
- *       - bearerAuth: []
- */
 router.post('/', createTodo);
-
-/**
- * @swagger
- * /todos/{id}:
- *   put:
- *     summary: Update a todo
- *     tags: [Todos]
- *     security:
- *       - bearerAuth: []
- */
 router.put('/:id', updateTodo);
-
-/**
- * @swagger
- * /todos/{id}/complete:
- *   post:
- *     summary: Complete todo with images
- *     tags: [Todos]
- *     security:
- *       - bearerAuth: []
- */
 router.post('/:id/complete', upload.array('images', 10), completeTodo);
-
-/**
- * @swagger
- * /todos/{id}/approve:
- *   patch:
- *     summary: Approve a completed todo
- *     tags: [Todos]
- *     security:
- *       - bearerAuth: []
- */
 router.patch('/:id/approve', approveTodo);
-
-/**
- * @swagger
- * /todos/{id}/reject:
- *   patch:
- *     summary: Reject a completed todo
- *     tags: [Todos]
- *     security:
- *       - bearerAuth: []
- */
 router.patch('/:id/reject', rejectTodo);
-
-/**
- * @swagger
- * /todos/{id}:
- *   delete:
- *     summary: Soft delete a todo
- *     tags: [Todos]
- *     security:
- *       - bearerAuth: []
- */
 router.delete('/:id', deleteTodo);
 
 module.exports = router;
