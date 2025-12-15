@@ -21,7 +21,13 @@ const SettingsSchema = new mongoose.Schema({
   discountAmount: { type: Number, default: 4000 },
   discountValidityPeriod: { type: String, default: 'within a month' },
   guestHouseLocation: { type: String, default: 'Ambewela' },
-  discountSmsDaysAfterCheckout: { type: Number, default: 10 }
+  discountSmsDaysAfterCheckout: { type: Number, default: 10 },
+  clientId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Client',
+    required: true,
+    index: true
+  }
 }, { timestamps: true });
 
 module.exports = mongoose.model("Settings", SettingsSchema);

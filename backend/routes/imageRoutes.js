@@ -10,7 +10,12 @@ const Image = require("../models/image");
 const Room = require("../models/room");
 const Hotel = require("../models/hotel");
 const Booking = require("../models/booking");
-const Staff = require("../models/staff"); // ✅ Added Staff model
+const Staff = require("../models/staff");
+const authMiddleware = require("../middleware/authMiddleware");
+const { addTenantId } = require("../middleware/authMiddleware");
+
+// Apply auth middleware to all routes
+router.use(authMiddleware);
 
 // ✅ Multer config (memory storage)
 const upload = multer({
@@ -22,7 +27,7 @@ const upload = multer({
       "image/jpg", 
       "image/png", 
       "image/webp",
-      "application/pdf" // ✅ Added PDF support for documents
+      "application/pdf"
     ];
 
     if (allowedMimes.includes(file.mimetype) || allowedExtensions.test(file.originalname)) {
@@ -32,7 +37,7 @@ const upload = multer({
       cb(new Error("Only .jpg, .jpeg, .png, .webp, and .pdf files are allowed"), false);
     }
   },
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB max
+  limits: { fileSize: 10 * 1024 * 1024 },
 });
 
 // ✅ Helper to upload to Cloudinary
@@ -46,15 +51,13 @@ async function uploadToCloudinary(fileBuffer, originalName, folderName) {
       .slice(0, 60);
 
     const publicId = `${baseName}_${Date.now()}`;
-
-    // Detect if it's a PDF
     const isPDF = originalName.toLowerCase().endsWith('.pdf');
 
     const uploadStream = cloudinary.uploader.upload_stream(
       {
         folder: `zonova_mist/${folderName}`,
         public_id: publicId,
-        resource_type: isPDF ? "raw" : "image", // ✅ Handle PDFs
+        resource_type: isPDF ? "raw" : "image",
       },
       (error, result) => {
         if (error) return reject(error);
@@ -84,13 +87,11 @@ router.post("/upload", upload.array("photos", 10), async (req, res) => {
 
     const normalizedType = String(moduleType).trim();
     
-    // ✅ Updated to include Staff and StaffDP
     if (!["Room", "Hotel", "Booking", "Staff", "StaffDP"].includes(normalizedType))
       return res.status(400).json({ 
         message: "Invalid moduleType (Room | Hotel | Booking | Staff | StaffDP)" 
       });
 
-    // ✅ Detect model dynamically - Added Staff (StaffDP uses same Staff model)
     const Model =
       normalizedType === "Room"
         ? Room
@@ -106,7 +107,11 @@ router.post("/upload", upload.array("photos", 10), async (req, res) => {
       return res.status(400).json({ message: "Invalid module type" });
     }
 
-    const target = await Model.findById(moduleId);
+    // ✅ Verify target belongs to user's tenant
+    const target = await Model.findOne({ 
+      _id: moduleId, 
+      ...req.tenantFilter 
+    });
     if (!target)
       return res.status(404).json({ message: `${normalizedType} not found` });
 
@@ -120,7 +125,8 @@ router.post("/upload", upload.array("photos", 10), async (req, res) => {
         const folder = normalizedType.toLowerCase();
         const uploaded = await uploadToCloudinary(file.buffer, file.originalname, folder);
 
-        const imgDoc = await Image.create({
+        // ✅ Add clientId to image document
+        const imgData = addTenantId(req, {
           url: uploaded.url,
           public_id: uploaded.public_id,
           moduleId,
@@ -128,6 +134,8 @@ router.post("/upload", upload.array("photos", 10), async (req, res) => {
           uploadedBy: uploadedBy || "admin",
           imageType: imageType || "general",
         });
+
+        const imgDoc = await Image.create(imgData);
 
         results.push({
           url: uploaded.url,
@@ -161,7 +169,6 @@ router.get("/:moduleType/:moduleId", async (req, res) => {
     const { moduleType, moduleId } = req.params;
     const normalizedType = String(moduleType).trim();
 
-    // ✅ Updated to include Staff and StaffDP
     if (!["Room", "Hotel", "Booking", "Staff", "StaffDP"].includes(normalizedType))
       return res.status(400).json({ 
         message: "Invalid moduleType (Room | Hotel | Booking | Staff | StaffDP)" 
@@ -170,7 +177,9 @@ router.get("/:moduleType/:moduleId", async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(moduleId))
       return res.status(400).json({ message: "Invalid moduleId format" });
 
+    // ✅ Filter images by tenant
     const images = await Image.find({
+      ...req.tenantFilter,
       moduleId,
       moduleType: normalizedType,
     }).sort({ createdAt: -1 });
@@ -189,10 +198,13 @@ router.delete("/image", express.json(), async (req, res) => {
     const { public_id } = req.body;
     if (!public_id) return res.status(400).json({ message: "public_id required" });
 
-    const image = await Image.findOne({ public_id });
-    if (!image) return res.status(404).json({ message: "Image not found in DB" });
+    // ✅ Find image with tenant filter
+    const image = await Image.findOne({ 
+      public_id, 
+      ...req.tenantFilter 
+    });
+    if (!image) return res.status(404).json({ message: "Image not found" });
 
-    // Determine resource type from public_id or URL
     const resourceType = image.url.includes('.pdf') ? 'raw' : 'image';
     
     await cloudinary.uploader.destroy(public_id, { resource_type: resourceType });
@@ -210,8 +222,13 @@ router.delete("/image", express.json(), async (req, res) => {
 router.delete("/:public_id", async (req, res) => {
   try {
     const decoded = decodeURIComponent(req.params.public_id);
-    const image = await Image.findOne({ public_id: decoded });
-    if (!image) return res.status(404).json({ message: "Image not found in DB" });
+    
+    // ✅ Find image with tenant filter
+    const image = await Image.findOne({ 
+      public_id: decoded, 
+      ...req.tenantFilter 
+    });
+    if (!image) return res.status(404).json({ message: "Image not found" });
 
     const resourceType = image.url.includes('.pdf') ? 'raw' : 'image';
     

@@ -1,10 +1,10 @@
 const User = require('../models/user');
 const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs'); // Add bcrypt
+const bcrypt = require('bcryptjs');
 
 // --- REGISTER ---
 const register = async (req, res) => {
-  const { fullName, email, password } = req.body;
+  const { fullName, email, password, clientId } = req.body;
 
   if (!fullName || !email || !password) {
     return res.status(400).json({ message: 'All fields are required' });
@@ -20,7 +20,13 @@ const register = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    const newUser = new User({ fullName, email, password: hashedPassword });
+    // Include clientId when creating user
+    const newUser = new User({ 
+      fullName, 
+      email, 
+      password: hashedPassword,
+      clientId
+    });
     await newUser.save();
 
     res.status(201).json({ message: 'User registered successfully' });
@@ -49,8 +55,14 @@ const login = async (req, res) => {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
+    // ✅ Include clientId in JWT token for multi-tenancy
     const token = jwt.sign(
-      { id: user._id, email: user.email, fullName: user.fullName },
+      { 
+        id: user._id, 
+        email: user.email, 
+        fullName: user.fullName,
+        clientId: user.clientId  // Add clientId to token
+      },
       process.env.JWT_SECRET,
       { expiresIn: '1h' }
     );
@@ -61,7 +73,8 @@ const login = async (req, res) => {
       user: {
         id: user._id,
         fullName: user.fullName,
-        email: user.email
+        email: user.email,
+        clientId: user.clientId
       }
     });
   } catch (err) {

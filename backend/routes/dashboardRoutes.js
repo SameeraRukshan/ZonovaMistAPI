@@ -2,6 +2,10 @@
 const express = require('express');
 const router = express.Router();
 const Booking = require('../models/booking');
+const authMiddleware = require('../middleware/authMiddleware');
+
+// Apply auth middleware to all routes
+router.use(authMiddleware);
 
 /**
  * Helper function to get date range based on period and comparison
@@ -13,7 +17,7 @@ function getDateRange(timePeriod, comparison) {
   switch (timePeriod) {
     case 'week':
       const currentWeekStart = new Date(now);
-      currentWeekStart.setDate(now.getDate() - now.getDay()); // Start of week (Sunday)
+      currentWeekStart.setDate(now.getDate() - now.getDay());
       currentWeekStart.setHours(0, 0, 0, 0);
       
       if (comparison === 'prev') {
@@ -106,6 +110,7 @@ router.get('/stats', async (req, res) => {
     const revenueResult = await Booking.aggregate([
       {
         $match: {
+          ...req.tenantFilter,
           status: 'paid',
           deleted: { $ne: true },
           ...dateFilter
@@ -123,6 +128,7 @@ router.get('/stats', async (req, res) => {
     const advancesResult = await Booking.aggregate([
       {
         $match: {
+          ...req.tenantFilter,
           status: 'advance_paid',
           deleted: { $ne: true },
           ...dateFilter
@@ -154,6 +160,7 @@ router.get('/stats', async (req, res) => {
     const prevRevenueResult = await Booking.aggregate([
       {
         $match: {
+          ...req.tenantFilter,
           status: 'paid',
           deleted: { $ne: true },
           ...prevDateFilter
@@ -170,6 +177,7 @@ router.get('/stats', async (req, res) => {
     const prevAdvancesResult = await Booking.aggregate([
       {
         $match: {
+          ...req.tenantFilter,
           status: 'advance_paid',
           deleted: { $ne: true },
           ...prevDateFilter
@@ -277,6 +285,7 @@ router.get('/revenue-comparison', async (req, res) => {
       const aggregation = await Booking.aggregate([
         {
           $match: {
+            ...req.tenantFilter,
             status: 'paid',
             deleted: { $ne: true },
             checkin_date: {
@@ -340,7 +349,7 @@ router.get('/expense-comparison', async (req, res) => {
     };
     
     // TODO: Implement when Expense model is ready
-    // Similar structure to revenue-comparison
+    // Add ...req.tenantFilter to $match when implemented
     
     res.json(result);
     
