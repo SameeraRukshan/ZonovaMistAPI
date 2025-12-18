@@ -67,6 +67,12 @@ const staffSchema = new Schema({
     type: String, 
     required: false,
     default: ''
+  },
+  clientId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Client',
+    required: true,
+    index: true
   }
 }, { 
   timestamps: true,

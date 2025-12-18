@@ -30,6 +30,12 @@ const bookingSchema = new mongoose.Schema({
     enum: ['pending', 'paid', 'cancelled', 'advance_paid'],
     default: 'pending'
   },
+  clientId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Client',
+    required: true,
+    index: true
+  },
   reminder_sms_sent: { type: Boolean, default: false },
   reminderSmsSentAt: { type: Date, default: null },
   birthday_sms_sent: { type: Boolean, default: false },

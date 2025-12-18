@@ -65,6 +65,12 @@ const todoSchema = new mongoose.Schema({
   deletedBy: { 
     type: String, 
     default: null 
+  },
+  clientId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Client',
+    required: true,
+    index: true
   }
 }, {
   timestamps: true
