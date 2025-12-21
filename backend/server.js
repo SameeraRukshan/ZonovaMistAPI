@@ -41,12 +41,10 @@ app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/images', require('./routes/imageRoutes'));
 app.use('/api/settings', require('./routes/settingsRoutes'));
 app.use('/api/invoices', require('./routes/invoiceRoutes'));
-
-// ⭐⭐⭐ EXPENSE ROUTE (CHANGED FROM /api/expenses to /api/expense) ⭐⭐⭐
-app.use('/api/expense', require('./routes/expenseRoutes'));
-// Dashboard routes එක add කරන්න
 app.use('/api/dashboard', require('./routes/dashboardRoutes'));
 
+// ⭐⭐⭐ EXPENSE ROUTE - CHANGED TO PLURAL /api/expenses ⭐⭐⭐
+app.use('/api/expenses', require('./routes/expenseRoutes'));
 
 // Swagger
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
@@ -77,23 +75,23 @@ app.get("/", (req, res) => {
         </div>
         
         <div class="endpoint">
-          <span class="method">POST</span> /api/expense - Create expense
+          <span class="method">POST</span> /api/expenses - Create expense
         </div>
         
         <div class="endpoint">
-          <span class="method">GET</span> /api/expense - Get all expenses
+          <span class="method">GET</span> /api/expenses - Get all expenses
         </div>
         
         <div class="endpoint">
-          <span class="method">GET</span> /api/expense/:id - Get single expense
+          <span class="method">GET</span> /api/expenses/:id - Get single expense
         </div>
         
         <div class="endpoint">
-          <span class="method">PUT</span> /api/expense/:id - Update expense
+          <span class="method">PUT</span> /api/expenses/:id - Update expense
         </div>
         
         <div class="endpoint">
-          <span class="method">DELETE</span> /api/expense/:id - Delete expense
+          <span class="method">DELETE</span> /api/expenses/:id - Delete expense
         </div>
         
         <h3>📚 <a href="/api-docs">View Swagger Documentation</a></h3>
@@ -180,7 +178,7 @@ app.use((err, req, res, next) => {
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📡 API available at http://localhost:${PORT}/api`);
-  console.log(`💾 Expense API: http://localhost:${PORT}/api/expense`);
+  console.log(`💾 Expense API: http://localhost:${PORT}/api/expenses`);
 });
 
 // Include any additional jobs

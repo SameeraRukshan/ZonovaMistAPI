@@ -20,6 +20,11 @@ const expenseSchema = new mongoose.Schema({
   date: { type: Date, required: true, default: Date.now },
   description: { type: String, default: '', trim: true },
   images: [imageSchema],
+  clientId: {  // ⭐⭐⭐ Add this field
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'User', 
+    required: false  // Optional for backward compatibility
+  },
   deleted: { type: Boolean, default: false },
   deletedAt: { type: Date, default: null },
   deletedBy: { type: String, default: null }
@@ -28,6 +33,7 @@ const expenseSchema = new mongoose.Schema({
 expenseSchema.index({ deleted: 1, date: -1 });
 expenseSchema.index({ deleted: 1, category: 1 });
 expenseSchema.index({ deleted: 1, createdAt: -1 });
+expenseSchema.index({ clientId: 1, deleted: 1 }); // ⭐ Add index
 
 expenseSchema.virtual('amountValue').get(function() {
   return this.amount ? parseFloat(this.amount.toString()) : 0;

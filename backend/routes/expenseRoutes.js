@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const Expense = require("../models/expense");
+const authMiddleware = require("../middleware/authMiddleware"); // ⭐ Add this line
 
 // Safe date parse
 const safeDate = (d) => {
@@ -8,10 +9,14 @@ const safeDate = (d) => {
   return isNaN(dt) ? new Date() : dt;
 };
 
+// ⭐⭐⭐ Apply auth middleware to all routes ⭐⭐⭐
+router.use(authMiddleware);
+
 // CREATE EXPENSE
 router.post("/", async (req, res) => {
   try {
     console.log("📥 Received expense data:", JSON.stringify(req.body, null, 2));
+    console.log("👤 User ID:", req.user.id); // ⭐ Log user ID
     
     const { category, title, amount, date, description, images } = req.body;
 
@@ -39,6 +44,7 @@ router.post("/", async (req, res) => {
       date: safeDate(date),
       description: description || "",
       images: imageArray,
+      clientId: req.user.id, // ⭐⭐⭐ Add this line
     });
 
     const saved = await expense.save();
@@ -54,8 +60,11 @@ router.post("/", async (req, res) => {
 // GET ALL EXPENSES
 router.get("/", async (req, res) => {
   try {
-    console.log("📋 Fetching all expenses...");
-    const list = await Expense.find({ deleted: false }).sort({ createdAt: -1 });
+    console.log("📋 Fetching expenses for user:", req.user.id); // ⭐ Log user ID
+    const list = await Expense.find({ 
+      deleted: false,
+      clientId: req.user.id // ⭐⭐⭐ Filter by user
+    }).sort({ createdAt: -1 });
     console.log(`✅ Found ${list.length} expenses`);
     res.json(list);
   } catch (err) {
@@ -68,7 +77,10 @@ router.get("/", async (req, res) => {
 router.get("/:id", async (req, res) => {
   try {
     console.log("🔍 Fetching expense:", req.params.id);
-    const exp = await Expense.findById(req.params.id);
+    const exp = await Expense.findOne({ // ⭐ Changed from findById
+      _id: req.params.id,
+      clientId: req.user.id // ⭐⭐⭐ Filter by user
+    });
     if (!exp || exp.deleted) {
       console.error("❌ Expense not found");
       return res.status(404).json({ error: "Not found" });
@@ -85,7 +97,10 @@ router.get("/:id", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     console.log("📝 Updating expense:", req.params.id);
-    const exp = await Expense.findById(req.params.id);
+    const exp = await Expense.findOne({ // ⭐ Changed from findById
+      _id: req.params.id,
+      clientId: req.user.id // ⭐⭐⭐ Filter by user
+    });
     if (!exp || exp.deleted) {
       console.error("❌ Expense not found");
       return res.status(404).json({ error: "Not found" });
@@ -124,7 +139,10 @@ router.put("/:id", async (req, res) => {
 router.delete("/:id", async (req, res) => {
   try {
     console.log("🗑️ Deleting expense:", req.params.id);
-    const exp = await Expense.findById(req.params.id);
+    const exp = await Expense.findOne({ // ⭐ Changed from findById
+      _id: req.params.id,
+      clientId: req.user.id // ⭐⭐⭐ Filter by user
+    });
     if (!exp || exp.deleted) {
       console.error("❌ Expense not found");
       return res.status(404).json({ error: "Not found" });
