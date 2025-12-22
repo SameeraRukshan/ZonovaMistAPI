@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Room = require('../models/room');
+<<<<<<< HEAD
 const authMiddleware = require('../middleware/authMiddleware');
 const { addTenantId } = require('../middleware/authMiddleware');
 
@@ -8,6 +9,8 @@ const { addTenantId } = require('../middleware/authMiddleware');
 router.use(authMiddleware);
 
 // GET all rooms
+=======
+>>>>>>> room-rate-new
 router.get('/', async (req, res) => {
   try {
     const rooms = await Room.find(req.tenantFilter).sort({ roomNumber: 1 });
