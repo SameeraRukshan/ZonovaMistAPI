@@ -10,7 +10,6 @@ const { swaggerUi, swaggerSpec } = require("./swagger");
 const path = require('path');
 const http = require('http');
 const WebSocket = require('ws');
-const dashboardRoutes = require('./routes/dashboardRoutes');
 
 dotenv.config();
 connectDB();
@@ -42,24 +41,14 @@ app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/images', require('./routes/imageRoutes'));
 app.use('/api/settings', require('./routes/settingsRoutes'));
 app.use('/api/invoices', require('./routes/invoiceRoutes'));
-<<<<<<< HEAD
-app.use('/api/staff', require('./routes/staffRoutes')); 
-app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/todos', require('./routes/todoRoutes'));
-=======
 app.use('/api/dashboard', require('./routes/dashboardRoutes'));
 
 // ⭐⭐⭐ EXPENSE ROUTE - CHANGED TO PLURAL /api/expenses ⭐⭐⭐
 app.use('/api/expenses', require('./routes/expenseRoutes'));
->>>>>>> room-rate-new
 
 // Swagger
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-<<<<<<< HEAD
-// Root route
-app.get("/", (req, res) => res.send("Backend is running 🚀"));
-=======
 // Root route with API documentation
 app.get("/", (req, res) => {
   res.send(`
@@ -110,7 +99,6 @@ app.get("/", (req, res) => {
     </html>
   `);
 });
->>>>>>> room-rate-new
 
 // Invoice route
 app.get('/invoice/:bookingId', async (req, res) => {
@@ -194,11 +182,4 @@ server.listen(PORT, '0.0.0.0', () => {
 });
 
 // Include any additional jobs
-<<<<<<< HEAD
-console.log('⏰ Initializing cron jobs...');
-require('./jobs/discountJob');
 require('./jobs/reminderJob');
-console.log('✅ Cron jobs initialized');
-=======
-require('./jobs/reminderJob');
->>>>>>> room-rate-new
