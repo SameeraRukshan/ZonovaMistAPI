@@ -1,45 +1,36 @@
 const express = require('express');
 const router = express.Router();
 const Room = require('../models/room');
-const authMiddleware = require('../middleware/authMiddleware');
-const { addTenantId } = require('../middleware/authMiddleware');
-
-// Apply auth middleware to all routes
-router.use(authMiddleware);
-
-// GET all rooms
 router.get('/', async (req, res) => {
   try {
-    const rooms = await Room.find(req.tenantFilter).sort({ roomNumber: 1 });
+    const rooms = await Room.find();
     res.json(rooms);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
-// GET room by ID
-router.get('/:id', async (req, res) => {
+router.patch('/:id', async (req, res) => {
   try {
-    const room = await Room.findOne({ 
-      _id: req.params.id, 
-      ...req.tenantFilter 
-    });
+    const updateData = { ...req.body, updatedAt: new Date() };
+    const room = await Room.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true }
+    );
     if (!room) {
       return res.status(404).json({ message: 'Room not found' });
     }
     res.json(room);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: 'Failed to update room', error: err.message });
   }
 });
 
-// POST create room
 router.post('/', async (req, res) => {
   try {
     const { roomNumber, floor, type, bedCount, maxOccupancy, pricePerNight, status, amenities } = req.body;
-    
-    // Add clientId to room data
-    const roomData = addTenantId(req, {
+    const room = new Room({
       roomNumber,
       floor,
       type,
@@ -51,8 +42,6 @@ router.post('/', async (req, res) => {
       createdAt: new Date(),
       updatedAt: new Date()
     });
-    
-    const room = new Room(roomData);
     const newRoom = await room.save();
     res.status(201).json(newRoom);
   } catch (err) {
@@ -62,10 +51,7 @@ router.post('/', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   try {
-    const room = await Room.findOneAndDelete({ 
-      _id: req.params.id, 
-      ...req.tenantFilter 
-    });
+    const room = await Room.findByIdAndDelete(req.params.id);
     if (!room) {
       return res.status(404).json({ message: 'Room not found' });
     }
