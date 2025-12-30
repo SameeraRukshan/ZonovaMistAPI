@@ -4,6 +4,7 @@ const router = express.Router();
 const Expense = require("../models/expense");
 const Booking = require("../models/booking");
 const jwt = require("jsonwebtoken");
+const { addTenantId } = require('../middleware/authMiddleware');
 
 // 🔥 Authentication Middleware
 const protect = async (req, res, next) => {
