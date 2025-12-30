@@ -54,6 +54,7 @@ const upload = multer({
 // All routes require authentication
 router.use(verifyToken);
 
+// Todo routes - tenant filtering is handled in the controller
 router.get('/', getAllTodos);
 router.get('/my', getMyTodos);
 router.get('/user/:userId', getTodosByUser);

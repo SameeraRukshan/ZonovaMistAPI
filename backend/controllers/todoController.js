@@ -1,10 +1,12 @@
 const Todo = require('../models/todo');
 const cloudinary = require('../config/cloudinary');
+const { addTenantId } = require('../middleware/authMiddleware');
 
 // Get all todos created by logged in user
 exports.getAllTodos = async (req, res) => {
   try {
     const todos = await Todo.find({ 
+      ...req.tenantFilter,
       createdBy: req.user.id,
       deleted: false 
     })
@@ -23,6 +25,7 @@ exports.getAllTodos = async (req, res) => {
 exports.getMyTodos = async (req, res) => {
   try {
     const todos = await Todo.find({ 
+      ...req.tenantFilter,
       assignedTo: req.user.id,
       deleted: false 
     })
@@ -43,6 +46,7 @@ exports.getTodosByUser = async (req, res) => {
     const { userId } = req.params;
     
     const todos = await Todo.find({ 
+      ...req.tenantFilter,
       assignedTo: userId,
       deleted: false 
     })
@@ -62,6 +66,7 @@ exports.getTodoById = async (req, res) => {
   try {
     const todo = await Todo.findOne({ 
       _id: req.params.id,
+      ...req.tenantFilter,
       deleted: false 
     })
       .populate('assignedTo', 'fullName email')
@@ -90,7 +95,8 @@ exports.createTodo = async (req, res) => {
       });
     }
     
-    const todo = new Todo({
+    // Add clientId using addTenantId helper
+    const todoData = addTenantId(req, {
       title,
       description,
       dueDate: dueDate || new Date(),
@@ -99,6 +105,8 @@ exports.createTodo = async (req, res) => {
       createdBy: req.user.id,
       status: 'New'
     });
+    
+    const todo = new Todo(todoData);
     
     await todo.save();
     
@@ -126,9 +134,10 @@ exports.updateTodo = async (req, res) => {
     delete updates.createdDate;
     delete updates.deleted;
     delete updates.images;
+    delete updates.clientId; // Prevent clientId modification
     
     const todo = await Todo.findOneAndUpdate(
-      { _id: id, deleted: false },
+      { _id: id, ...req.tenantFilter, deleted: false },
       updates,
       { new: true, runValidators: true }
     )
@@ -162,7 +171,11 @@ exports.completeTodo = async (req, res) => {
       });
     }
 
-    const todo = await Todo.findOne({ _id: id, deleted: false });
+    const todo = await Todo.findOne({ 
+      _id: id, 
+      ...req.tenantFilter, 
+      deleted: false 
+    });
     
     if (!todo) {
       return res.status(404).json({ success: false, message: 'Todo not found' });
@@ -208,7 +221,7 @@ exports.approveTodo = async (req, res) => {
     const { id } = req.params;
     
     const todo = await Todo.findOneAndUpdate(
-      { _id: id, deleted: false, status: 'Completed' },
+      { _id: id, ...req.tenantFilter, deleted: false, status: 'Completed' },
       { 
         status: 'Approved',
         approvedAt: new Date()
@@ -242,7 +255,7 @@ exports.rejectTodo = async (req, res) => {
     const { id } = req.params;
     
     const todo = await Todo.findOneAndUpdate(
-      { _id: id, deleted: false, status: 'Completed' },
+      { _id: id, ...req.tenantFilter, deleted: false, status: 'Completed' },
       { 
         status: 'New',
         completedAt: null,
@@ -285,7 +298,7 @@ exports.deleteTodo = async (req, res) => {
     const { id } = req.params;
     
     const todo = await Todo.findOneAndUpdate(
-      { _id: id, deleted: false },
+      { _id: id, ...req.tenantFilter, deleted: false },
       { 
         deleted: true, 
         deletedAt: new Date(),

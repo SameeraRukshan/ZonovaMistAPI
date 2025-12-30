@@ -1,6 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const Staff = require('../models/staff');
+const authMiddleware = require('../middleware/authMiddleware');
+const { addTenantId } = require('../middleware/authMiddleware');
+
+// Apply auth middleware to all routes
+router.use(authMiddleware);
 
 /**
  * GET /staff/roles - Get all available staff roles
@@ -16,6 +21,58 @@ router.get('/roles', async (req, res) => {
 });
 
 /**
+ * GET /staff/stats/summary - Get staff statistics
+ * Returns count by role and status
+ * Note: This must be defined BEFORE /:id route
+ */
+router.get('/stats/summary', async (req, res) => {
+  try {
+    // ✅ Add tenant filter to aggregation
+    const stats = await Staff.aggregate([
+      {
+        $match: req.tenantFilter || {}
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: 1 },
+          byRole: {
+            $push: { role: '$role' }
+          },
+          byStatus: {
+            $push: { status: '$status' }
+          }
+        }
+      }
+    ]);
+
+    const roleCount = {};
+    const statusCount = {};
+
+    if (stats.length > 0) {
+      // Count by role
+      stats[0].byRole.forEach(item => {
+        roleCount[item.role] = (roleCount[item.role] || 0) + 1;
+      });
+
+      // Count by status
+      stats[0].byStatus.forEach(item => {
+        statusCount[item.status] = (statusCount[item.status] || 0) + 1;
+      });
+    }
+
+    res.json({
+      total: stats.length > 0 ? stats[0].total : 0,
+      byRole: roleCount,
+      byStatus: statusCount
+    });
+  } catch (err) {
+    console.error('❌ Error fetching staff stats:', err.message);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+/**
  * GET /staff - Fetch all staff with optional filtering
  * Query params:
  * - role: filter by role
@@ -26,7 +83,8 @@ router.get('/', async (req, res) => {
   try {
     const { role, status, search } = req.query;
     
-    let query = {};
+    // ✅ Start with tenant filter
+    let query = { ...req.tenantFilter };
     
     // Role filtering
     if (role && ['Admin', 'Owner', 'Manager', 'Technician', 'Reception', 'Cleaning'].includes(role)) {
@@ -64,7 +122,11 @@ router.get('/', async (req, res) => {
  */
 router.get('/:id', async (req, res) => {
   try {
-    const staff = await Staff.findById(req.params.id);
+    // ✅ Add tenant filter
+    const staff = await Staff.findOne({ 
+      _id: req.params.id, 
+      ...req.tenantFilter 
+    });
     
     if (!staff) {
       console.error('Staff member not found for ID:', req.params.id);
@@ -105,16 +167,19 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ message: 'Invalid email format' });
     }
 
-    // Check if email already exists (if provided)
+    // ✅ Check if email already exists within same tenant (if provided)
     if (req.body.email) {
-      const existingStaff = await Staff.findOne({ email: req.body.email });
+      const existingStaff = await Staff.findOne({ 
+        email: req.body.email,
+        ...req.tenantFilter 
+      });
       if (existingStaff) {
         return res.status(400).json({ message: 'Email already exists' });
       }
     }
 
-    // Create staff member
-    const staff = new Staff({
+    // ✅ Create staff member with clientId
+    const staffData = addTenantId(req, {
       name: req.body.name,
       profile_picture: req.body.profile_picture || null,
       birthday: req.body.birthday || null,
@@ -127,6 +192,8 @@ router.post('/', async (req, res) => {
       emergency_contact: req.body.emergency_contact || {},
       notes: req.body.notes || ''
     });
+
+    const staff = new Staff(staffData);
 
     await staff.save();
     console.log('✅ Staff member created:', staff.name);
@@ -149,7 +216,11 @@ router.post('/', async (req, res) => {
  */
 router.patch('/:id', async (req, res) => {
   try {
-    const staff = await Staff.findById(req.params.id);
+    // ✅ Add tenant filter
+    const staff = await Staff.findOne({ 
+      _id: req.params.id, 
+      ...req.tenantFilter 
+    });
     
     if (!staff) {
       console.error('Staff member not found for ID:', req.params.id);
@@ -171,11 +242,12 @@ router.patch('/:id', async (req, res) => {
       return res.status(400).json({ message: 'Invalid email format' });
     }
 
-    // Check if email already exists (if changing email)
+    // ✅ Check if email already exists within same tenant (if changing email)
     if (req.body.email && req.body.email !== staff.email) {
       const existingStaff = await Staff.findOne({ 
         email: req.body.email,
-        _id: { $ne: req.params.id }
+        _id: { $ne: req.params.id },
+        ...req.tenantFilter
       });
       if (existingStaff) {
         return res.status(400).json({ message: 'Email already exists' });
@@ -192,7 +264,7 @@ router.patch('/:id', async (req, res) => {
       }
     }
 
-    // Update fields
+    // Update fields (prevent clientId modification)
     const allowedUpdates = [
       'name', 'profile_picture', 'birthday', 'email', 'phone', 
       'joined_date', 'current_salary', 'role', 'status', 
@@ -226,7 +298,11 @@ router.patch('/:id', async (req, res) => {
  */
 router.delete('/:id', async (req, res) => {
   try {
-    const staff = await Staff.findByIdAndDelete(req.params.id);
+    // ✅ Add tenant filter
+    const staff = await Staff.findOneAndDelete({ 
+      _id: req.params.id, 
+      ...req.tenantFilter 
+    });
     
     if (!staff) {
       console.error('Staff member not found for ID:', req.params.id);
@@ -237,53 +313,6 @@ router.delete('/:id', async (req, res) => {
     res.json({ message: 'Staff member deleted successfully' });
   } catch (err) {
     console.error('❌ Staff deletion error:', err.message);
-    res.status(500).json({ message: err.message });
-  }
-});
-
-/**
- * GET /staff/stats/summary - Get staff statistics
- * Returns count by role and status
- */
-router.get('/stats/summary', async (req, res) => {
-  try {
-    const stats = await Staff.aggregate([
-      {
-        $group: {
-          _id: null,
-          total: { $sum: 1 },
-          byRole: {
-            $push: { role: '$role' }
-          },
-          byStatus: {
-            $push: { status: '$status' }
-          }
-        }
-      }
-    ]);
-
-    const roleCount = {};
-    const statusCount = {};
-
-    if (stats.length > 0) {
-      // Count by role
-      stats[0].byRole.forEach(item => {
-        roleCount[item.role] = (roleCount[item.role] || 0) + 1;
-      });
-
-      // Count by status
-      stats[0].byStatus.forEach(item => {
-        statusCount[item.status] = (statusCount[item.status] || 0) + 1;
-      });
-    }
-
-    res.json({
-      total: stats.length > 0 ? stats[0].total : 0,
-      byRole: roleCount,
-      byStatus: statusCount
-    });
-  } catch (err) {
-    console.error('❌ Error fetching staff stats:', err.message);
     res.status(500).json({ message: err.message });
   }
 });
