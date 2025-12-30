@@ -95,11 +95,11 @@ const login = async (req, res) => {
     }
 
     // ✅ Verify client is active
-    // TEMPORARY: Commented out for testing - Kavindya's client missing
+   //TEMPORARY: Commented out for testing - Kavindya's client missing
     // const client = await Client.findById(user.clientId);
     // if (!client || !client.isActive) {
     //   return res.status(403).json({ message: 'Your organization is inactive' });
-    // }
+    //}
 
     // ✅ Include clientId in JWT token
     const token = jwt.sign(
