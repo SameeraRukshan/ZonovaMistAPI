@@ -4,7 +4,7 @@ const mongoose = require('mongoose');
 const imageSchema = new mongoose.Schema({
   filename: { type: String, required: true },
   url: { type: String, required: true },
-  cloudinary_id: { type: String, required: true },
+  cloudinary_id:   String,
   fileSize: { type: Number }, // in bytes
   mimeType: { type: String }, // e.g., 'image/jpeg'
   uploadedAt: { type: Date, default: Date.now }
@@ -77,4 +77,4 @@ expenseSchema.virtual('amountValue').get(function() {
 expenseSchema.set('toJSON', { virtuals: true });
 expenseSchema.set('toObject', { virtuals: true });
 
-module.exports = mongoose.model('Expense', expenseSchema);
+module.exports = mongoose.model('Expense', expenseSchema,);
