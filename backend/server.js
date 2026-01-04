@@ -42,6 +42,8 @@ app.use('/api/images', require('./routes/imageRoutes'));
 app.use('/api/settings', require('./routes/settingsRoutes'));
 app.use('/api/invoices', require('./routes/invoiceRoutes'));
 
+app.use('/api/assets', require('./routes/assetRoutes'));
+
 // ⭐⭐⭐ EXPENSE ROUTE (CHANGED FROM /api/expenses to /api/expense) ⭐⭐⭐
 app.use('/api/expense', require('./routes/expenseRoutes'));
 // Dashboard routes එක add කරන්න
