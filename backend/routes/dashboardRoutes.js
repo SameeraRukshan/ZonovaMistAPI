@@ -1,16 +1,37 @@
 // routes/dashboardRoutes.js
 const express = require('express');
 const router = express.Router();
-const Booking = require('../models/booking');
-const authMiddleware = require('../middleware/authMiddleware');
+const Expense = require("../models/expense");
+const Booking = require("../models/booking");
+const jwt = require("jsonwebtoken");
 
-// Apply auth middleware to all routes
-router.use(authMiddleware);
+// 🔥 Authentication Middleware
+const protect = async (req, res, next) => {
+  let token;
 
-/**
- * Helper function to get date range based on period and comparison
- */
-function getDateRange(timePeriod, comparison) {
+  if (req.headers.authorization && req.headers.authorization.startsWith("Bearer")) {
+    try {
+      token = req.headers.authorization.split(" ")[1];
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      req.user = decoded;
+      next();
+    } catch (error) {
+      console.error("❌ Token verification failed:", error.message);
+      return res.status(401).json({ error: "Not authorized, token failed" });
+    }
+  } else {
+    return res.status(401).json({ error: "Not authorized, no token" });
+  }
+};
+
+// Helper function to parse Decimal128
+const parseDecimal = (val) => {
+  if (!val) return 0;
+  return parseFloat(val.toString());
+};
+
+// Helper function to get date range based on time period
+const getDateRange = (timePeriod, customStartDate, customEndDate) => {
   const now = new Date();
   let startDate, endDate;
   

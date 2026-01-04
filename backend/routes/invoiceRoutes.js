@@ -42,7 +42,7 @@ router.post('/send-invoice-sms', authMiddleware, async (req, res) => {
     console.log('✅ Booking updated with invoice details');
 
     // Use production URL - hardcoded for now, can be from env
-    const baseUrl = process.env.BASE_URL || 'https://zonova-mist.onrender.com';
+    const baseUrl = process.env.BASE_URL || 'https://zonovamistapi-uke8.onrender.com';
     const invoiceUrl = `${baseUrl}/invoice/${bookingId}`;
     
     console.log('🔗 Invoice URL:', invoiceUrl);

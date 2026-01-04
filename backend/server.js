@@ -9,7 +9,6 @@ const { swaggerUi, swaggerSpec } = require("./swagger");
 const path = require('path');
 const http = require('http');
 const WebSocket = require('ws');
-const dashboardRoutes = require('./routes/dashboardRoutes');
 
 dotenv.config();
 connectDB();
@@ -42,8 +41,9 @@ app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/images', require('./routes/imageRoutes'));
 app.use('/api/settings', require('./routes/settingsRoutes'));
 app.use('/api/invoices', require('./routes/invoiceRoutes'));
+app.use('/api/dashboard', require('./routes/dashboardRoutes'));
+app.use('/api/expenses', require('./routes/expenseRoutes'));
 app.use('/api/staff', require('./routes/staffRoutes')); 
-app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/todos', require('./routes/todoRoutes'));
 
 // Swagger
