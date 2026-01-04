@@ -42,7 +42,6 @@ app.use('/api/images', require('./routes/imageRoutes'));
 app.use('/api/settings', require('./routes/settingsRoutes'));
 app.use('/api/invoices', require('./routes/invoiceRoutes'));
 app.use('/api/dashboard', require('./routes/dashboardRoutes'));
-app.use('/api/expenses', require('./routes/expenseRoutes'));
 app.use('/api/staff', require('./routes/staffRoutes')); 
 app.use('/api/todos', require('./routes/todoRoutes'));
 
