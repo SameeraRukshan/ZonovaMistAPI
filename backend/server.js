@@ -14,7 +14,7 @@ dotenv.config();
 connectDB();
 
 const app = express();
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 3000;
 
 // ✅ CORS setup: allow all origins, handle preflight
 app.use(cors({
@@ -42,7 +42,6 @@ app.use('/api/images', require('./routes/imageRoutes'));
 app.use('/api/settings', require('./routes/settingsRoutes'));
 app.use('/api/invoices', require('./routes/invoiceRoutes'));
 app.use('/api/dashboard', require('./routes/dashboardRoutes'));
-app.use('/api/expenses', require('./routes/expenseRoutes'));
 app.use('/api/staff', require('./routes/staffRoutes')); 
 app.use('/api/todos', require('./routes/todoRoutes'));
 
