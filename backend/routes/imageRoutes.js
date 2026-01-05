@@ -11,6 +11,7 @@ const Room = require("../models/room");
 const Hotel = require("../models/hotel");
 const Booking = require("../models/booking");
 const Staff = require("../models/staff"); // ✅ Added Staff model
+const Asset = require("../models/asset"); // ✅ Added Asset model
 
 // ✅ Multer config (memory storage)
 const upload = multer({
@@ -69,6 +70,23 @@ async function uploadToCloudinary(fileBuffer, originalName, folderName) {
   });
 }
 
+// ✅ Normalize and map module types (case-insensitive)
+function canonicalizeModuleType(raw) {
+  if (!raw) return null;
+  const v = String(raw).trim().toLowerCase();
+  const map = {
+    room: "Room",
+    hotel: "Hotel",
+    booking: "Booking",
+    staff: "Staff",
+    staffdp: "StaffDP",
+    "staff-dp": "StaffDP",
+    asset: "Asset",
+    assets: "Asset",
+  };
+  return map[v] || null;
+}
+
 // ✅ POST /api/images/upload
 router.post("/upload", upload.array("photos", 10), async (req, res) => {
   try {
@@ -82,12 +100,10 @@ router.post("/upload", upload.array("photos", 10), async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(moduleId))
       return res.status(400).json({ message: "Invalid moduleId format" });
 
-    const normalizedType = String(moduleType).trim();
-    
-    // ✅ Updated to include Staff and StaffDP
-    if (!["Room", "Hotel", "Booking", "Staff", "StaffDP"].includes(normalizedType))
-      return res.status(400).json({ 
-        message: "Invalid moduleType (Room | Hotel | Booking | Staff | StaffDP)" 
+    const normalizedType = canonicalizeModuleType(moduleType);
+    if (!normalizedType)
+      return res.status(400).json({
+        message: `Invalid moduleType '${moduleType}'. Use one of: Room | Hotel | Booking | Staff | StaffDP | Asset`,
       });
 
     // ✅ Detect model dynamically - Added Staff (StaffDP uses same Staff model)
@@ -100,6 +116,8 @@ router.post("/upload", upload.array("photos", 10), async (req, res) => {
         ? Booking
         : normalizedType === "Staff" || normalizedType === "StaffDP"
         ? Staff
+        : normalizedType === "Asset"
+        ? Asset
         : null;
 
     if (!Model) {
@@ -134,6 +152,10 @@ router.post("/upload", upload.array("photos", 10), async (req, res) => {
           public_id: uploaded.public_id,
           dbId: imgDoc._id,
         });
+        // ✅ If uploading for Asset, also store URL in Asset.photos
+        if (normalizedType === "Asset") {
+          await Model.findByIdAndUpdate(moduleId, { $push: { photos: uploaded.url } });
+        }
         
         console.log(`✅ Uploaded ${file.originalname} for ${normalizedType}`);
       } catch (fileErr) {
@@ -159,12 +181,11 @@ router.post("/upload", upload.array("photos", 10), async (req, res) => {
 router.get("/:moduleType/:moduleId", async (req, res) => {
   try {
     const { moduleType, moduleId } = req.params;
-    const normalizedType = String(moduleType).trim();
+    const normalizedType = canonicalizeModuleType(moduleType);
 
-    // ✅ Updated to include Staff and StaffDP
-    if (!["Room", "Hotel", "Booking", "Staff", "StaffDP"].includes(normalizedType))
-      return res.status(400).json({ 
-        message: "Invalid moduleType (Room | Hotel | Booking | Staff | StaffDP)" 
+    if (!normalizedType)
+      return res.status(400).json({
+        message: `Invalid moduleType '${moduleType}'. Use one of: Room | Hotel | Booking | Staff | StaffDP | Asset`,
       });
 
     if (!mongoose.Types.ObjectId.isValid(moduleId))
