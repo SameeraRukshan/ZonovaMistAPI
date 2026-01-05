@@ -3,11 +3,12 @@ const router = express.Router();
 const Asset = require('../models/asset');
 const Image = require('../models/image');
 const cloudinary = require('../config/cloudinary');
+const protect = require('../middleware/authMiddleware');
 
-// GET all assets
+// GET all assets (exclude soft-deleted)
 router.get('/', async (req, res) => {
   try {
-    const assets = await Asset.find();
+    const assets = await Asset.find({ deleted: false }).sort({ createdAt: -1 });
     res.json(assets);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -25,11 +26,11 @@ router.post('/', async (req, res) => {
   }
 });
 
-// GET single asset
+// GET single asset (404 if soft-deleted)
 router.get('/:id', async (req, res) => {
   try {
     const asset = await Asset.findById(req.params.id);
-    if (!asset) return res.status(404).json({ message: 'Asset not found' });
+    if (!asset || asset.deleted) return res.status(404).json({ message: 'Asset not found' });
     res.json(asset);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -118,24 +119,18 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE asset + related images from Cloudinary
-router.delete('/:id', async (req, res) => {
+// DELETE asset (Soft Delete for consistency)
+router.delete('/:id', protect, async (req, res) => {
   try {
     const asset = await Asset.findById(req.params.id);
-    if (!asset) return res.status(404).json({ message: 'Asset not found' });
+    if (!asset || asset.deleted) return res.status(404).json({ message: 'Asset not found' });
 
-    const images = await Image.find({ moduleId: asset._id, moduleType: 'Asset' });
-    for (const img of images) {
-      try {
-        const resourceType = img.url.includes('.pdf') ? 'raw' : 'image';
-        await cloudinary.uploader.destroy(img.public_id, { resource_type: resourceType });
-        await img.deleteOne();
-      } catch (e) {
-        console.warn('Failed to delete image:', img.public_id, e.message);
-      }
-    }
+    asset.deleted = true;
+    asset.deletedAt = new Date();
+    asset.deletedBy = (req.user && (req.user.email || req.user.id)) || null;
+    await asset.save();
 
-    await asset.deleteOne();
+    // Note: We do NOT delete Cloudinary images on soft delete, preserving history.
     res.json({ message: 'Asset deleted successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });

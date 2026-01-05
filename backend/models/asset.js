@@ -11,6 +11,14 @@ const assetSchema = new mongoose.Schema({
   warrantyEndDate: { type: Date },
   warrantyDetails: { type: String },
   photos: { type: [String], default: [] },
+  // Soft delete fields
+  deleted: { type: Boolean, default: false },
+  deletedAt: { type: Date, default: null },
+  deletedBy: { type: String, default: null },
 }, { timestamps: true });
+
+// Indexes for common queries
+assetSchema.index({ deleted: 1, category: 1 });
+assetSchema.index({ deleted: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Asset', assetSchema);
