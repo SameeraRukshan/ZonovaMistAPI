@@ -43,6 +43,8 @@ app.use('/api/settings', require('./routes/settingsRoutes'));
 app.use('/api/invoices', require('./routes/invoiceRoutes'));
 
 app.use('/api/assets', require('./routes/assetRoutes'));
+// Alias singular route to avoid client 404s
+app.use('/api/asset', require('./routes/assetRoutes'));
 
 // ⭐⭐⭐ EXPENSE ROUTE (CHANGED FROM /api/expenses to /api/expense) ⭐⭐⭐
 app.use('/api/expense', require('./routes/expenseRoutes'));

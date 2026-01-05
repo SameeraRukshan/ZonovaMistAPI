@@ -8,6 +8,8 @@ const assetSchema = new mongoose.Schema({
   description: { type: String },
   quantity: { type: Number, default: 1 },
   brand: { type: String },
+  warrantyEndDate: { type: Date },
+  warrantyDetails: { type: String },
   photos: { type: [String], default: [] },
 }, { timestamps: true });
 
