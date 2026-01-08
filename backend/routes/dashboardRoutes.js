@@ -3,26 +3,9 @@ const express = require("express");
 const router = express.Router();
 const Expense = require("../models/expense");
 const Booking = require("../models/booking");
-const jwt = require("jsonwebtoken");
+const auth = require("../middleware/authMiddleware");
 
-// 🔥 Authentication Middleware
-const protect = async (req, res, next) => {
-  let token;
-
-  if (req.headers.authorization && req.headers.authorization.startsWith("Bearer")) {
-    try {
-      token = req.headers.authorization.split(" ")[1];
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      req.user = decoded;
-      next();
-    } catch (error) {
-      console.error("❌ Token verification failed:", error.message);
-      return res.status(401).json({ error: "Not authorized, token failed" });
-    }
-  } else {
-    return res.status(401).json({ error: "Not authorized, no token" });
-  }
-};
+// Use shared auth middleware (adds req.user and req.tenantFilter)
 
 // Helper function to parse Decimal128
 const parseDecimal = (val) => {
@@ -31,7 +14,7 @@ const parseDecimal = (val) => {
 };
 
 // Helper function to get date range based on time period
-const getDateRange = (timePeriod, customStartDate, customEndDate) => {
+const getDateRange = (timePeriod, comparison = 'now', customStartDate, customEndDate) => {
   const now = new Date();
   let startDate, endDate;
   
@@ -87,8 +70,12 @@ const getDateRange = (timePeriod, customStartDate, customEndDate) => {
       break;
       
     case 'custom':
-      // For custom, dates should be provided in query params
-      return null;
+      if (customStartDate && customEndDate) {
+        startDate = new Date(customStartDate);
+        endDate = new Date(customEndDate);
+      } else {
+        return null;
+      }
       
     default:
       return null;
@@ -100,30 +87,11 @@ const getDateRange = (timePeriod, customStartDate, customEndDate) => {
 // --------------------------------------------------
 // GET DASHBOARD STATS
 // --------------------------------------------------
-router.get("/stats", protect, async (req, res) => {
+router.get("/stats", auth, async (req, res) => {
   try {
     const { timePeriod = 'month', startDate, endDate } = req.query;
-    
-    let dateFilter = {};
-    
-    if (timePeriod === 'custom' && startDate && endDate) {
-      dateFilter = {
-        checkin_date: {
-          $gte: new Date(startDate),
-          $lte: new Date(endDate)
-        }
-      };
-    } else {
-      const range = getDateRange(timePeriod, 'now');
-      if (range) {
-        dateFilter = {
-          checkin_date: {
-            $gte: range.startDate,
-            $lte: range.endDate
-          }
-        };
-      }
-    }
+    const range = getDateRange(timePeriod, 'now', startDate, endDate);
+    const dateFilter = range ? { checkin_date: { $gte: range.startDate, $lte: range.endDate } } : {};
     
     console.log('📊 Fetching dashboard stats with filter:', dateFilter);
     
@@ -164,18 +132,8 @@ router.get("/stats", protect, async (req, res) => {
     ]);
     
     // Calculate previous period for trends
-    let prevDateFilter = {};
-    if (timePeriod !== 'custom') {
-      const prevRange = getDateRange(timePeriod, 'prev');
-      if (prevRange) {
-        prevDateFilter = {
-          checkin_date: {
-            $gte: prevRange.startDate,
-            $lte: prevRange.endDate
-          }
-        };
-      }
-    }
+    const prevRange = timePeriod !== 'custom' ? getDateRange(timePeriod, 'prev', startDate, endDate) : null;
+    const prevDateFilter = prevRange ? { checkin_date: { $gte: prevRange.startDate, $lte: prevRange.endDate } } : {};
     
     // Previous period revenue for trend calculation
     const prevRevenueResult = await Booking.aggregate([
@@ -216,6 +174,21 @@ router.get("/stats", protect, async (req, res) => {
     const advances = advancesResult[0]?.total || 0;
     const prevRevenue = prevRevenueResult[0]?.total || 0;
     const prevAdvances = prevAdvancesResult[0]?.total || 0;
+
+    // Expenses for same range
+    const expenseDateFilter = range ? { date: { $gte: range.startDate, $lte: range.endDate } } : {};
+    const expensesAgg = await Expense.aggregate([
+      { $match: { ...req.tenantFilter, deleted: { $ne: true }, ...expenseDateFilter } },
+      { $group: { _id: null, total: { $sum: { $toDouble: "$amount" } } } }
+    ]);
+    const totalExpenses = expensesAgg[0]?.total || 0;
+    
+    // Previous period expenses
+    const prevExpensesAgg = await Expense.aggregate([
+      { $match: { ...req.tenantFilter, deleted: { $ne: true }, ...(prevRange ? { date: { $gte: prevRange.startDate, $lte: prevRange.endDate } } : {}) } },
+      { $group: { _id: null, total: { $sum: { $toDouble: "$amount" } } } }
+    ]);
+    const prevExpenses = prevExpensesAgg[0]?.total || 0;
     
     // Calculate trends
     const revenueTrend = prevRevenue > 0 
@@ -224,29 +197,34 @@ router.get("/stats", protect, async (req, res) => {
     const advancesTrend = prevAdvances > 0
       ? ((advances - prevAdvances) / prevAdvances * 100).toFixed(1)
       : '0.0';
-    
+    const expenseTrend = prevExpenses > 0
+      ? ((totalExpenses - prevExpenses) / prevExpenses * 100).toFixed(1)
+      : '0.0';
+
     const stats = {
       revenue: {
-        value: totalRevenue,
-        trend: `${totalRevenue > 0 ? '+' : ''}0.0%`,
-        isPositive: true
+        value: revenue,
+        trend: `${parseFloat(revenueTrend) >= 0 ? '+' : ''}${revenueTrend}%`,
+        isPositive: parseFloat(revenueTrend) >= 0
       },
       advances: {
-        value: totalAdvances,
-        trend: `${totalAdvances > 0 ? '+' : ''}0.0%`,
-        isPositive: true
+        value: advances,
+        trend: `${parseFloat(advancesTrend) >= 0 ? '+' : ''}${advancesTrend}%`,
+        isPositive: parseFloat(advancesTrend) >= 0
       },
       commission: {
-        value: totalCommission,
-        trend: `${totalCommission > 0 ? '+' : ''}0.0%`,
+        value: 0,
+        trend: '+0.0%',
         isPositive: true
       },
       expenses: {
         value: totalExpenses,
-        trend: `${expenseTrend >= 0 ? '+' : ''}${expenseTrend.toFixed(1)}%`,
-        isPositive: expenseTrend <= 0 // For expenses, less is better
+        trend: `${parseFloat(expenseTrend) >= 0 ? '+' : ''}${expenseTrend}%`,
+        isPositive: parseFloat(expenseTrend) <= 0 // For expenses, less is better
       }
-    });
+    };
+
+    res.json(stats);
 
   } catch (err) {
     console.error("❌ Stats Error:", err.message);
@@ -257,7 +235,7 @@ router.get("/stats", protect, async (req, res) => {
 // --------------------------------------------------
 // ✅ FIXED: GET EXPENSE COMPARISON DATA
 // --------------------------------------------------
-router.get("/expense-comparison", protect, async (req, res) => {
+router.get("/expense-comparison", auth, async (req, res) => {
   try {
     const { 
       timePeriod = 'month', 
@@ -288,85 +266,37 @@ router.get("/expense-comparison", protect, async (req, res) => {
       return res.json(result);
     }
 
-    // Helper to get expenses grouped by period
-    const getExpenseData = (expenses, groupByYear = false) => {
-      if (groupByYear) {
-        // Group by month
-        const monthlyData = {};
-        expenses.forEach(exp => {
-          const date = new Date(exp.date);
-          const month = date.getMonth();
-          const year = date.getFullYear();
-          const monthName = new Date(year, month).toLocaleString('default', { month: 'short' });
-          const key = `${year}-${month}`;
-          
-          if (!monthlyData[key]) {
-            monthlyData[key] = {
-              label: `${monthName} ${year}`,
-              value: 0,
-              date: new Date(year, month, 1)
-            };
-          }
-          
-          const amount = parseDecimal(exp.amount);
-          monthlyData[key].value += amount;
-          console.log(`  Added ${amount} to ${monthName} ${year}, total: ${monthlyData[key].value}`);
-        });
-        
-        return Object.values(monthlyData).sort((a, b) => a.date - b.date);
-      } else {
-        dateRange = getDateRange(timePeriod, comparison);
-      }
-      
-      if (!dateRange) continue;
-      
-      // Aggregate revenue by date
-      const groupBy = timePeriod === 'year' 
-        ? { $month: '$checkin_date' }
-        : { $dayOfMonth: '$checkin_date' };
-      
-      const aggregation = await Booking.aggregate([
-        {
-          $match: {
-            ...req.tenantFilter,
-            status: 'paid',
-            deleted: { $ne: true },
-            checkin_date: {
-              $gte: dateRange.startDate,
-              $lte: dateRange.endDate
-            }
-          }
-        },
-        {
-          $group: {
-            _id: groupBy,
-            total: { $sum: '$total_price' },
-            date: { $first: '$checkin_date' }
-          }
-        },
-        {
-          $sort: { _id: 1 }
+    // Build data for each comparison period
+    for (const comparison of comparisonsList) {
+      const range = getDateRange(timePeriod, comparison, customStart, customEnd);
+      if (!range) continue;
+
+      const match = { ...req.tenantFilter, deleted: { $ne: true }, date: { $gte: range.startDate, $lte: range.endDate } };
+      const expenses = await Expense.find(match).sort({ date: 1 });
+
+      // Group by day (week/month) or month (year)
+      const points = [];
+      const byKey = {};
+      for (const exp of expenses) {
+        const d = new Date(exp.date);
+        const key = timePeriod === 'year' ? `${d.getFullYear()}-${d.getMonth()}` : d.toISOString().slice(0,10);
+        const label = timePeriod === 'year'
+          ? new Date(d.getFullYear(), d.getMonth(), 1).toLocaleString('default', { month: 'short' })
+          : key;
+        const val = parseDecimal(exp.amount);
+        if (!byKey[key]) {
+          byKey[key] = { label, value: 0, date: timePeriod === 'year' ? new Date(d.getFullYear(), d.getMonth(), 1) : new Date(key) };
         }
-      ]);
-      
-      // Format data points
-      const dataPoints = aggregation.map(item => ({
-        label: timePeriod === 'year' 
-          ? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][item._id - 1]
-          : item._id.toString(),
-        value: parseFloat(item.total.toString()), // Convert Decimal128 to number
-        date: item.date
-      }));
-      
-      // Fill in missing dates with 0
-      const filledData = fillMissingDates(dataPoints, dateRange, timePeriod);
-      
-      if (comparison === 'prev') result.prevData = filledData;
-      else if (comparison === 'now') result.nowData = filledData;
-      else result.nextData = filledData;
+        byKey[key].value += val;
+      }
+      const data = Object.values(byKey).sort((a,b) => a.date - b.date);
+
+      if (comparison === 'prev') result.prevData = data;
+      else if (comparison === 'now') result.nowData = data;
+      else result.nextData = data;
     }
-    
-    console.log('✅ Revenue comparison data prepared');
+
+    console.log('✅ Expense comparison data prepared');
     res.json(result);
 
   } catch (err) {
@@ -378,7 +308,7 @@ router.get("/expense-comparison", protect, async (req, res) => {
 // --------------------------------------------------
 // GET REVENUE COMPARISON DATA
 // --------------------------------------------------
-router.get("/revenue-comparison", protect, async (req, res) => {
+router.get("/revenue-comparison", auth, async (req, res) => {
   try {
     const { 
       timePeriod = 'month', 

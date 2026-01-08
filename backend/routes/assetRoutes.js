@@ -3,22 +3,23 @@ const router = express.Router();
 const Asset = require('../models/asset');
 const Image = require('../models/image');
 const cloudinary = require('../config/cloudinary');
-const protect = require('../middleware/authMiddleware');
+const auth = require('../middleware/authMiddleware');
 
-// GET all assets (exclude soft-deleted)
-router.get('/', async (req, res) => {
+// GET all assets (exclude soft-deleted) - tenant scoped
+router.get('/', auth, async (req, res) => {
   try {
-    const assets = await Asset.find({ deleted: false }).sort({ createdAt: -1 });
+    const baseFilter = { deleted: false };
+    const assets = await Asset.find({ ...baseFilter, ...(req.tenantFilter || {}) }).sort({ createdAt: -1 });
     res.json(assets);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// POST create new asset
-router.post('/', async (req, res) => {
+// POST create new asset - tenant scoped
+router.post('/', auth, async (req, res) => {
   try {
-    const asset = new Asset(req.body);
+    const asset = new Asset(auth.addTenantId(req, req.body));
     await asset.save();
     res.status(201).json(asset);
   } catch (err) {
@@ -26,10 +27,10 @@ router.post('/', async (req, res) => {
   }
 });
 
-// GET single asset (404 if soft-deleted)
-router.get('/:id', async (req, res) => {
+// GET single asset (404 if soft-deleted) - tenant scoped
+router.get('/:id', auth, async (req, res) => {
   try {
-    const asset = await Asset.findById(req.params.id);
+    const asset = await Asset.findOne({ _id: req.params.id, ...(req.tenantFilter || {}) });
     if (!asset || asset.deleted) return res.status(404).json({ message: 'Asset not found' });
     res.json(asset);
   } catch (err) {
@@ -37,8 +38,8 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// PATCH update asset
-router.patch('/:id', async (req, res) => {
+// PATCH update asset - tenant scoped
+router.patch('/:id', auth, async (req, res) => {
   try {
     const allowed = [
       'name',
@@ -67,19 +68,19 @@ router.patch('/:id', async (req, res) => {
       return res.status(400).json({ message: 'quantity cannot be negative' });
     }
 
-    const asset = await Asset.findByIdAndUpdate(req.params.id, updates, {
-      new: true,
-      runValidators: true,
-    });
-    if (!asset) return res.status(404).json({ message: 'Asset not found' });
-    res.json(asset);
+    const asset = await Asset.findOne({ _id: req.params.id, ...(req.tenantFilter || {}) });
+    if (!asset || asset.deleted) return res.status(404).json({ message: 'Asset not found' });
+
+    Object.assign(asset, updates);
+    const saved = await asset.save();
+    res.json(saved);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
-// PUT update asset (alias to support clients using PUT)
-router.put('/:id', async (req, res) => {
+// PUT update asset (alias to support clients using PUT) - tenant scoped
+router.put('/:id', auth, async (req, res) => {
   try {
     const allowed = [
       'name',
@@ -108,21 +109,20 @@ router.put('/:id', async (req, res) => {
       return res.status(400).json({ message: 'quantity cannot be negative' });
     }
 
-    const asset = await Asset.findByIdAndUpdate(req.params.id, updates, {
-      new: true,
-      runValidators: true,
-    });
-    if (!asset) return res.status(404).json({ message: 'Asset not found' });
-    res.json(asset);
+    const asset = await Asset.findOne({ _id: req.params.id, ...(req.tenantFilter || {}) });
+    if (!asset || asset.deleted) return res.status(404).json({ message: 'Asset not found' });
+    Object.assign(asset, updates);
+    const saved = await asset.save();
+    res.json(saved);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
-// DELETE asset (Soft Delete for consistency)
-router.delete('/:id', protect, async (req, res) => {
+// DELETE asset (Soft Delete for consistency) - tenant scoped
+router.delete('/:id', auth, async (req, res) => {
   try {
-    const asset = await Asset.findById(req.params.id);
+    const asset = await Asset.findOne({ _id: req.params.id, ...(req.tenantFilter || {}) });
     if (!asset || asset.deleted) return res.status(404).json({ message: 'Asset not found' });
 
     asset.deleted = true;
