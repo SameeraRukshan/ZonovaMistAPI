@@ -41,12 +41,20 @@ async function sendBookingSMS(clientPhone, clientName, roomNo, checkInDate) {
       guestHouseName: settings.guestHouseName,
       hostName: settings.hostName,
     });
+        // 1. Remove all non-numeric characters using Regex (/\D/g matches non-digits)
+    let cleanNumber = clientPhone.replace(/[^0-9]/g, '');
+
+    // 2. Check length and format to Sri Lankan standard (94...)
+    if (cleanNumber.length >= 9) {
+      // slice(-9) grabs the last 9 characters
+      cleanNumber = `94${cleanNumber.slice(-9)}`;
+    }
 
     const params = new URLSearchParams();
     params.append('user_id', userId);
     params.append('api_key', apiKey);
     params.append('sender_id', senderId);
-    params.append('to', clientPhone);
+    params.append('to', cleanNumber);
     params.append('message', message);
 
     console.log('Sending SMS with params:', params.toString());
@@ -90,12 +98,19 @@ async function sendAdvancePaidSMS(clientPhone, clientName, roomNo, advanceAmount
       guestHouseName: settings.guestHouseName,
       hostName: settings.hostName,
     });
+         // 1. Remove all non-numeric characters using Regex (/\D/g matches non-digits)
+    let cleanNumber = clientPhone.replace(/[^0-9]/g, '');
 
+    // 2. Check length and format to Sri Lankan standard (94...)
+    if (cleanNumber.length >= 9) {
+      // slice(-9) grabs the last 9 characters
+      cleanNumber = `94${cleanNumber.slice(-9)}`;
+    }
     const params = new URLSearchParams();
     params.append('user_id', userId);
     params.append('api_key', apiKey);
     params.append('sender_id', senderId);
-    params.append('to', clientPhone);
+    params.append('to', cleanNumber);
     params.append('message', message);
 
     console.log('📤 Sending advance paid SMS:', message);
@@ -144,11 +159,19 @@ async function sendDiscountSMS(clientPhone, clientName) {
       .replace('{discountAmount}', discountAmount.toString())
       .replace('{telephone}', telephone);
 
+           // 1. Remove all non-numeric characters using Regex (/\D/g matches non-digits)
+    let cleanNumber = clientPhone.replace(/[^0-9]/g, '');
+
+    // 2. Check length and format to Sri Lankan standard (94...)
+    if (cleanNumber.length >= 9) {
+      // slice(-9) grabs the last 9 characters
+      cleanNumber = `94${cleanNumber.slice(-9)}`;
+    }
     const params = new URLSearchParams();
     params.append('user_id', userId);
     params.append('api_key', apiKey);
     params.append('sender_id', senderId);
-    params.append('to', clientPhone);
+    params.append('to', cleanNumber);
     params.append('message', message);
 
     console.log('📤 Sending discount SMS:', message);
@@ -186,12 +209,19 @@ async function sendReminderSMS(clientPhone, clientName, roomNo, checkInDate) {
       guestHouseName: settings.guestHouseName,
       hostName: settings.hostName,
     });
+           // 1. Remove all non-numeric characters using Regex (/\D/g matches non-digits)
+    let cleanNumber = clientPhone.replace(/[^0-9]/g, '');
 
+    // 2. Check length and format to Sri Lankan standard (94...)
+    if (cleanNumber.length >= 9) {
+      // slice(-9) grabs the last 9 characters
+      cleanNumber = `94${cleanNumber.slice(-9)}`;
+    }
     const params = new URLSearchParams();
     params.append('user_id', userId);
     params.append('api_key', apiKey);
     params.append('sender_id', senderId);
-    params.append('to', clientPhone);
+    params.append('to', cleanNumber);
     params.append('message', message);
 
     console.log('Sending reminder SMS with params:', params.toString());
@@ -225,11 +255,19 @@ async function sendBirthdaySMS(clientPhone, clientName) {
       .replace('{guestHouseName}', settings.guestHouseName || 'Zonova Mist')
       .replace('{hostName}', settings.hostName || 'Team');
 
+           // 1. Remove all non-numeric characters using Regex (/\D/g matches non-digits)
+    let cleanNumber = clientPhone.replace(/[^0-9]/g, '');
+
+    // 2. Check length and format to Sri Lankan standard (94...)
+    if (cleanNumber.length >= 9) {
+      // slice(-9) grabs the last 9 characters
+      cleanNumber = `94${cleanNumber.slice(-9)}`;
+    }
     const params = new URLSearchParams();
     params.append('user_id', userId);
     params.append('api_key', apiKey);
     params.append('sender_id', senderId);
-    params.append('to', clientPhone);
+    params.append('to', cleanNumber);
     params.append('message', message);
 
     const response = await axios.post(
@@ -266,18 +304,25 @@ async function sendInvoiceSMS(clientPhone, message) {
     } catch (settingsErr) {
       console.warn('⚠️ Could not fetch settings, using default sender ID');
     }
+           // 1. Remove all non-numeric characters using Regex (/\D/g matches non-digits)
+    let cleanNumber = clientPhone.replace(/[^0-9]/g, '');
 
+    // 2. Check length and format to Sri Lankan standard (94...)
+    if (cleanNumber.length >= 9) {
+      // slice(-9) grabs the last 9 characters
+      cleanNumber = `94${cleanNumber.slice(-9)}`;
+    }
     const params = new URLSearchParams();
     params.append('user_id', userId);
     params.append('api_key', apiKey);
     params.append('sender_id', senderId);
-    params.append('to', clientPhone);
+    params.append('to', cleanNumber);
     params.append('message', message);
 
     console.log('📤 SMS Params:', {
       user_id: userId,
       sender_id: senderId,
-      to: clientPhone,
+      to: cleanNumber,
       message: message.substring(0, 50) + '...'
     });
 
