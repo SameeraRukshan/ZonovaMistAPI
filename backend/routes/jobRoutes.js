@@ -2,8 +2,11 @@ const express = require('express');
 const router = express.Router();
 const Booking = require('../models/booking');
 const { DateTime } = require('luxon');
-const { sendCheckinReminderSMS } = require('../models/smsService');
-const { sendBirthdaySMS } = require('../models/smsService');
+const { sendCheckinReminderSMS, sendBirthdaySMS } = require('../models/smsService');
+const authMiddleware = require('../middleware/authMiddleware');
+
+// Apply auth middleware to all routes
+router.use(authMiddleware);
 
 /**
  * @swagger
@@ -58,7 +61,9 @@ router.post('/send-checkin-reminders-now', async (req, res) => {
     const start = now.startOf('day').toUTC().toJSDate();
     const end = now.endOf('day').toUTC().toJSDate();
 
+    // ✅ Add tenant filter to query
     const candidates = await Booking.find({
+      ...req.tenantFilter,
       checkin_date: { $gte: start, $lte: end },
       status: { $in: ['Confirmed'] },
       $or: [
@@ -76,8 +81,10 @@ router.post('/send-checkin-reminders-now', async (req, res) => {
           roomNo: b.booked_room_no,
           checkInDate: b.checkin_date,
         });
+        
+        // ✅ Update with tenant filter
         await Booking.updateOne(
-          { _id: b._id },
+          { _id: b._id, ...req.tenantFilter },
           { $set: { reminder_sms_sent: true, reminderSmsSentAt: new Date() } }
         );
         results.push({ bookingId: b._id, phone: b.phone_no, status: 'sent', api: r });
@@ -101,7 +108,9 @@ router.post('/send-birthday-sms-now', async (req, res) => {
     const start = now.startOf('day').toUTC().toJSDate();
     const end = now.endOf('day').toUTC().toJSDate();
 
+    // ✅ Add tenant filter to query
     const candidates = await Booking.find({
+      ...req.tenantFilter,
       birthday: { $gte: start, $lte: end },
       $or: [
         { birthday_sms_sent: { $exists: false } },
@@ -113,8 +122,10 @@ router.post('/send-birthday-sms-now', async (req, res) => {
     for (const b of candidates) {
       try {
         const r = await sendBirthdaySMS(b.phone_no, b.guest_name);
+        
+        // ✅ Update with tenant filter
         await Booking.updateOne(
-          { _id: b._id },
+          { _id: b._id, ...req.tenantFilter },
           { $set: { birthday_sms_sent: true, birthdaySmsSentAt: new Date() } }
         );
         results.push({ bookingId: b._id, phone: b.phone_no, status: 'sent', api: r });

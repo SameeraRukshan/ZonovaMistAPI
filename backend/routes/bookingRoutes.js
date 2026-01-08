@@ -6,6 +6,11 @@ const { sendBookingSMS, sendAdvancePaidSMS } = require('../models/smsService');
 const multer = require('multer');
 const cloudinary = require('../config/cloudinary');
 const { Readable } = require('stream');
+const authMiddleware = require('../middleware/authMiddleware');
+const { addTenantId } = require('../middleware/authMiddleware');
+
+// Apply auth middleware to all routes
+router.use(authMiddleware);
 
 /**
  * GET /bookings - Fetch bookings with filtering and proper sorting
@@ -14,7 +19,8 @@ router.get('/', async (req, res) => {
   try {
     const { filter = 'recent', status, search, includeDeleted = 'false' } = req.query;
     
-    let query = {};
+    // Start with tenant filter
+    let query = { ...req.tenantFilter };
     let sortOrder = {};
     const now = new Date();
     
@@ -124,8 +130,8 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ message: 'Invalid status. Must be pending, paid, cancelled, or advance_paid.' });
     }
 
-    // Create booking
-    const booking = new Booking({
+    // Create booking with tenant ID
+    const bookingData = addTenantId(req, {
       guest_nic: req.body.guest_nic || null,
       guest_name: req.body.guest_name,
       booked_room_no: req.body.booked_room_no,
@@ -144,6 +150,8 @@ router.post('/', async (req, res) => {
       deleted: false
     });
 
+    const booking = new Booking(bookingData);
+
     await booking.save();
     console.log('✅ Booking saved:', booking._id);
 
@@ -151,9 +159,7 @@ router.post('/', async (req, res) => {
     if (booking.status === 'advance_paid') {
       console.log('📨 Triggering advance paid SMS for new booking');
       
-      // Get base URL from environment - use production URL
       const baseUrl = process.env.BASE_URL || 'https://zonova-mist.onrender.com';
-      
       const invoiceLink = `${baseUrl}/invoice/${booking._id}`;
       
       try {
@@ -167,7 +173,6 @@ router.post('/', async (req, res) => {
         console.log('✅ Advance paid SMS sent for new booking');
       } catch (smsErr) {
         console.error('⚠️ Failed to send SMS, but booking created:', smsErr.message);
-        // Don't fail the booking creation if SMS fails
       }
     }
 
@@ -183,18 +188,21 @@ router.post('/', async (req, res) => {
  */
 router.patch('/:id', async (req, res) => {
   try {
-    const booking = await Booking.findById(req.params.id);
+    // Find booking with tenant filter
+    const booking = await Booking.findOne({ 
+      _id: req.params.id, 
+      ...req.tenantFilter 
+    });
+    
     if (!booking) {
       console.error('Booking not found for ID:', req.params.id);
       return res.status(404).json({ message: 'Booking not found' });
     }
 
-    // Prevent updating deleted bookings
     if (booking.deleted) {
       return res.status(400).json({ message: 'Cannot update a deleted booking' });
     }
 
-    // Validate status
     const validStatuses = ['pending', 'paid', 'cancelled', 'advance_paid'];
     if (req.body.status && !validStatuses.includes(req.body.status.toLowerCase())) {
       console.error('Invalid status:', req.body.status);
@@ -203,7 +211,9 @@ router.patch('/:id', async (req, res) => {
 
     const previousStatus = booking.status;
     
-    // Update booking fields
+    // Prevent clientId modification
+    delete req.body.clientId;
+    
     Object.assign(booking, {
       ...req.body,
       status: req.body.status ? req.body.status.toLowerCase() : booking.status,
@@ -212,11 +222,9 @@ router.patch('/:id', async (req, res) => {
     await booking.save();
     console.log('✅ Booking updated:', booking._id);
 
-    // Send SMS when status changes TO advance_paid FROM any other status
     if (booking.status === 'advance_paid' && previousStatus !== 'advance_paid') {
       console.log('📨 Status changed to advance_paid, sending invoice SMS');
       
-      // Get base URL from environment
       const baseUrl = process.env.BASE_URL || 
                       process.env.BACKEND_URL || 
                       `http://localhost:${process.env.PORT || 3000}`;
@@ -234,7 +242,6 @@ router.patch('/:id', async (req, res) => {
         console.log('✅ Advance paid invoice SMS sent successfully');
       } catch (smsErr) {
         console.error('⚠️ Failed to send SMS:', smsErr.message);
-        // Don't fail the update if SMS fails
       }
     }
 
@@ -250,7 +257,11 @@ router.patch('/:id', async (req, res) => {
  */
 router.delete('/:id', async (req, res) => {
   try {
-    const booking = await Booking.findById(req.params.id);
+    const booking = await Booking.findOne({ 
+      _id: req.params.id, 
+      ...req.tenantFilter 
+    });
+    
     if (!booking) {
       console.error('Booking not found for ID:', req.params.id);
       return res.status(404).json({ message: 'Booking not found' });
@@ -281,7 +292,11 @@ router.delete('/:id', async (req, res) => {
  */
 router.post('/:id/restore', async (req, res) => {
   try {
-    const booking = await Booking.findById(req.params.id);
+    const booking = await Booking.findOne({ 
+      _id: req.params.id, 
+      ...req.tenantFilter 
+    });
+    
     if (!booking) {
       return res.status(404).json({ message: 'Booking not found' });
     }
@@ -312,7 +327,11 @@ router.post('/:id/restore', async (req, res) => {
  */
 router.delete('/:id/permanent', async (req, res) => {
   try {
-    const booking = await Booking.findByIdAndDelete(req.params.id);
+    const booking = await Booking.findOneAndDelete({ 
+      _id: req.params.id, 
+      ...req.tenantFilter 
+    });
+    
     if (!booking) {
       console.error('Booking not found for ID:', req.params.id);
       return res.status(404).json({ message: 'Booking not found' });
@@ -327,7 +346,6 @@ router.delete('/:id/permanent', async (req, res) => {
 
 /**
  * POST /bookings/send-discount-sms-test - Test endpoint to manually trigger discount SMS
- * For testing purposes only
  */
 router.post('/send-discount-sms-test', async (req, res) => {
   try {
@@ -340,7 +358,10 @@ router.post('/send-discount-sms-test', async (req, res) => {
       });
     }
     
-    const booking = await Booking.findById(bookingId);
+    const booking = await Booking.findOne({ 
+      _id: bookingId, 
+      ...req.tenantFilter 
+    });
     
     if (!booking) {
       return res.status(404).json({ 
@@ -349,7 +370,6 @@ router.post('/send-discount-sms-test', async (req, res) => {
       });
     }
     
-    // Check if already sent
     if (booking.discount_sms_sent) {
       console.log('⚠️ Discount SMS already sent to this booking');
       return res.status(400).json({ 
@@ -361,12 +381,10 @@ router.post('/send-discount-sms-test', async (req, res) => {
     
     console.log(`📨 Test: Sending discount SMS to ${booking.guest_name} (${booking.phone_no})`);
     
-    // Import the function at the top of the file
     const { sendDiscountSMS } = require('../models/smsService');
     
     await sendDiscountSMS(booking.phone_no, booking.guest_name);
     
-    // Mark as sent
     booking.discount_sms_sent = true;
     booking.discountSmsSentAt = new Date();
     await booking.save();
@@ -396,12 +414,11 @@ router.post('/send-discount-sms-test', async (req, res) => {
 
 /**
  * GET /bookings/eligible-for-discount - Get list of bookings eligible for discount SMS
- * For testing and monitoring
  */
 router.get('/eligible-for-discount', async (req, res) => {
   try {
     const Setting = require('../models/settings');
-    const settings = await Setting.findOne({});
+    const settings = await Setting.findOne(req.tenantFilter);
     const daysAfterCheckout = settings?.discountSmsDaysAfterCheckout || 10;
     
     const targetDate = new Date();
@@ -411,6 +428,7 @@ router.get('/eligible-for-discount', async (req, res) => {
     const endOfTargetDay = new Date(targetDate.setHours(23, 59, 59, 999));
     
     const eligibleBookings = await Booking.find({
+      ...req.tenantFilter,
       checkout_date: {
         $gte: startOfTargetDay,
         $lte: endOfTargetDay
@@ -436,6 +454,7 @@ router.get('/eligible-for-discount', async (req, res) => {
     });
   }
 });
+
 const storage = multer.memoryStorage();
 const upload = multer({
   storage: storage,
@@ -443,7 +462,6 @@ const upload = multer({
     fileSize: 25 * 1024 * 1024, // 25MB max file size
   },
   fileFilter: (req, file, cb) => {
-    // Accept only audio files
     const allowedMimes = ['audio/mpeg', 'audio/mp4', 'audio/x-m4a', 'audio/wav', 'audio/m4a'];
     const allowedExts = ['.mp3', '.m4a', '.wav'];
     
@@ -471,7 +489,11 @@ router.post('/:id/recordings', upload.single('audio'), async (req, res) => {
       });
     }
 
-    const booking = await Booking.findById(bookingId);
+    const booking = await Booking.findOne({ 
+      _id: bookingId, 
+      ...req.tenantFilter 
+    });
+    
     if (!booking) {
       return res.status(404).json({ 
         success: false, 
@@ -479,7 +501,6 @@ router.post('/:id/recordings', upload.single('audio'), async (req, res) => {
       });
     }
 
-    // Check if booking already has 10 recordings
     if (booking.recordings && booking.recordings.length >= 10) {
       return res.status(400).json({ 
         success: false, 
@@ -490,13 +511,12 @@ router.post('/:id/recordings', upload.single('audio'), async (req, res) => {
     console.log(`📤 Uploading recording for booking ${bookingId}`);
     console.log(`📁 File: ${req.file.originalname}, Size: ${req.file.size} bytes`);
 
-    // Upload to Cloudinary
     const uploadResult = await new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
           folder: 'zonova_mist/recordings',
           resource_type: 'auto',
-          format: req.file.originalname.split('.').pop(), // Preserve original format
+          format: req.file.originalname.split('.').pop(),
         },
         (error, result) => {
           if (error) reject(error);
@@ -504,14 +524,12 @@ router.post('/:id/recordings', upload.single('audio'), async (req, res) => {
         }
       );
 
-      // Create a readable stream from buffer
       const bufferStream = Readable.from(req.file.buffer);
       bufferStream.pipe(uploadStream);
     });
 
     console.log(`✅ Uploaded to Cloudinary: ${uploadResult.secure_url}`);
 
-    // Add recording to booking
     const newRecording = {
       filename: req.file.originalname,
       url: uploadResult.secure_url,
@@ -552,7 +570,11 @@ router.delete('/:id/recordings/:recordingId', async (req, res) => {
   try {
     const { id: bookingId, recordingId } = req.params;
 
-    const booking = await Booking.findById(bookingId);
+    const booking = await Booking.findOne({ 
+      _id: bookingId, 
+      ...req.tenantFilter 
+    });
+    
     if (!booking) {
       return res.status(404).json({ 
         success: false, 
@@ -560,7 +582,6 @@ router.delete('/:id/recordings/:recordingId', async (req, res) => {
       });
     }
 
-    // Find the recording
     const recording = booking.recordings.id(recordingId);
     if (!recording) {
       return res.status(404).json({ 
@@ -572,18 +593,15 @@ router.delete('/:id/recordings/:recordingId', async (req, res) => {
     console.log(`🗑️ Deleting recording ${recordingId} from booking ${bookingId}`);
     console.log(`☁️ Cloudinary ID: ${recording.cloudinary_id}`);
 
-    // Delete from Cloudinary
     try {
       await cloudinary.uploader.destroy(recording.cloudinary_id, {
-        resource_type: 'video' // Cloudinary treats audio as 'video' resource type
+        resource_type: 'video'
       });
       console.log(`✅ Deleted from Cloudinary: ${recording.cloudinary_id}`);
     } catch (cloudinaryError) {
       console.error('⚠️ Error deleting from Cloudinary:', cloudinaryError.message);
-      // Continue with database deletion even if Cloudinary delete fails
     }
 
-    // Remove from booking
     booking.recordings.pull(recordingId);
     await booking.save();
 
@@ -610,7 +628,11 @@ router.get('/:id/recordings', async (req, res) => {
   try {
     const bookingId = req.params.id;
 
-    const booking = await Booking.findById(bookingId).select('recordings');
+    const booking = await Booking.findOne({ 
+      _id: bookingId, 
+      ...req.tenantFilter 
+    }).select('recordings');
+    
     if (!booking) {
       return res.status(404).json({ 
         success: false, 

@@ -2,9 +2,10 @@ const express = require('express');
 const router = express.Router();
 const { sendInvoiceSMS } = require('../models/smsService');
 const Booking = require('../models/booking');
+const authMiddleware = require('../middleware/authMiddleware');
 
-// POST /api/invoices/send-invoice-sms
-router.post('/send-invoice-sms', async (req, res) => {
+// POST /api/invoices/send-invoice-sms (protected route)
+router.post('/send-invoice-sms', authMiddleware, async (req, res) => {
   try {
     console.log('📋 Invoice SMS Request received:', req.body);
     
@@ -19,7 +20,11 @@ router.post('/send-invoice-sms', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Valid total amount is required' });
     }
 
-    const booking = await Booking.findById(bookingId);
+    // ✅ Find booking with tenant filter
+    const booking = await Booking.findOne({ 
+      _id: bookingId, 
+      ...req.tenantFilter 
+    });
     if (!booking) {
       console.error('❌ Booking not found:', bookingId);
       return res.status(404).json({ success: false, error: 'Booking not found' });
@@ -37,7 +42,7 @@ router.post('/send-invoice-sms', async (req, res) => {
     console.log('✅ Booking updated with invoice details');
 
     // Use production URL - hardcoded for now, can be from env
-    const baseUrl = process.env.BASE_URL || 'https://zonova-mist.onrender.com';
+    const baseUrl = process.env.BASE_URL || 'https://zonovamistapi-uke8.onrender.com';
     const invoiceUrl = `${baseUrl}/invoice/${bookingId}`;
     
     console.log('🔗 Invoice URL:', invoiceUrl);
@@ -66,9 +71,11 @@ router.post('/send-invoice-sms', async (req, res) => {
   }
 });
 
-// GET /api/invoices/:bookingId - Returns invoice data as JSON
+// GET /api/invoices/:bookingId - Returns invoice data as JSON (public route for guests)
 router.get('/:bookingId', async (req, res) => {
   try {
+    // Note: This is a public route so guests can view their invoice
+    // No tenant filter here - accessed via direct link
     const booking = await Booking.findById(req.params.bookingId);
     if (!booking) {
       return res.status(404).json({ error: 'Booking not found' });

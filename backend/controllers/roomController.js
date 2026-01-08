@@ -1,10 +1,12 @@
 const Room = require('../models/room');
 
-// Get all rooms
+// ✅ Get all rooms
 const getRooms = async (req, res) => {
   try {
     const { status, type } = req.query;
-    let query = {};
+    
+    // Start with tenant filter
+    let query = { ...req.tenantFilter };
 
     if (status) query.status = status;
     if (type) query.type = type;

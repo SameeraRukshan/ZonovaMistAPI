@@ -34,16 +34,64 @@ const parseDecimal = (val) => {
 const getDateRange = (timePeriod, customStartDate, customEndDate) => {
   const now = new Date();
   let startDate, endDate;
-
-  if (timePeriod === 'custom' && customStartDate && customEndDate) {
-    startDate = new Date(customStartDate);
-    endDate = new Date(customEndDate);
-  } else if (timePeriod === 'year') {
-    startDate = new Date(now.getFullYear(), 0, 1);
-    endDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
-  } else { // month
-    startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-    endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+  
+  switch (timePeriod) {
+    case 'week':
+      const currentWeekStart = new Date(now);
+      currentWeekStart.setDate(now.getDate() - now.getDay());
+      currentWeekStart.setHours(0, 0, 0, 0);
+      
+      if (comparison === 'prev') {
+        startDate = new Date(currentWeekStart);
+        startDate.setDate(startDate.getDate() - 7);
+        endDate = new Date(currentWeekStart);
+        endDate.setMilliseconds(-1);
+      } else if (comparison === 'now') {
+        startDate = currentWeekStart;
+        endDate = new Date(currentWeekStart);
+        endDate.setDate(endDate.getDate() + 7);
+        endDate.setMilliseconds(-1);
+      } else { // next
+        startDate = new Date(currentWeekStart);
+        startDate.setDate(startDate.getDate() + 7);
+        endDate = new Date(startDate);
+        endDate.setDate(endDate.getDate() + 7);
+        endDate.setMilliseconds(-1);
+      }
+      break;
+      
+    case 'month':
+      if (comparison === 'prev') {
+        startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        endDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+      } else if (comparison === 'now') {
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      } else { // next
+        startDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+        endDate = new Date(now.getFullYear(), now.getMonth() + 2, 0, 23, 59, 59, 999);
+      }
+      break;
+      
+    case 'year':
+      if (comparison === 'prev') {
+        startDate = new Date(now.getFullYear() - 1, 0, 1);
+        endDate = new Date(now.getFullYear() - 1, 11, 31, 23, 59, 59, 999);
+      } else if (comparison === 'now') {
+        startDate = new Date(now.getFullYear(), 0, 1);
+        endDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+      } else { // next
+        startDate = new Date(now.getFullYear() + 1, 0, 1);
+        endDate = new Date(now.getFullYear() + 1, 11, 31, 23, 59, 59, 999);
+      }
+      break;
+      
+    case 'custom':
+      // For custom, dates should be provided in query params
+      return null;
+      
+    default:
+      return null;
   }
 
   return { startDate, endDate };
@@ -54,52 +102,130 @@ const getDateRange = (timePeriod, customStartDate, customEndDate) => {
 // --------------------------------------------------
 router.get("/stats", protect, async (req, res) => {
   try {
-    const { timePeriod = 'month', startDate: customStart, endDate: customEnd } = req.query;
+    const { timePeriod = 'month', startDate, endDate } = req.query;
     
-    const { startDate, endDate } = getDateRange(timePeriod, customStart, customEnd);
+    let dateFilter = {};
     
-    console.log("📊 Fetching stats from", startDate, "to", endDate);
-
-    // Get expenses for current period
-    const expenses = await Expense.find({
-      deleted: false,
-      date: { $gte: startDate, $lte: endDate }
-    });
-
-    const totalExpenses = expenses.reduce((sum, exp) => sum + parseDecimal(exp.amount), 0);
-
-    // Get bookings for revenue calculation
-    const bookings = await Booking.find({
-      checkin_date: { $gte: startDate, $lte: endDate }
-    });
-
-    const totalRevenue = bookings.reduce((sum, booking) => 
-      sum + parseDecimal(booking.total_price), 0);
+    if (timePeriod === 'custom' && startDate && endDate) {
+      dateFilter = {
+        checkin_date: {
+          $gte: new Date(startDate),
+          $lte: new Date(endDate)
+        }
+      };
+    } else {
+      const range = getDateRange(timePeriod, 'now');
+      if (range) {
+        dateFilter = {
+          checkin_date: {
+            $gte: range.startDate,
+            $lte: range.endDate
+          }
+        };
+      }
+    }
     
-    const totalAdvances = bookings.reduce((sum, booking) => 
-      sum + parseDecimal(booking.advance_amount), 0);
+    console.log('📊 Fetching dashboard stats with filter:', dateFilter);
     
-    const totalCommission = bookings.reduce((sum, booking) => 
-      sum + parseDecimal(booking.commission_amount), 0);
-
-    // Calculate previous period for trend
-    const periodLength = endDate - startDate;
-    const prevStartDate = new Date(startDate.getTime() - periodLength);
-    const prevEndDate = new Date(startDate.getTime() - 1);
-
-    const prevExpenses = await Expense.find({
-      deleted: false,
-      date: { $gte: prevStartDate, $lte: prevEndDate }
-    });
-
-    const prevTotalExpenses = prevExpenses.reduce((sum, exp) => 
-      sum + parseDecimal(exp.amount), 0);
-
-    // Calculate trend
-    const expenseTrend = prevTotalExpenses === 0 ? 0 : 
-      ((totalExpenses - prevTotalExpenses) / prevTotalExpenses) * 100;
-
-    res.json({
+    // Calculate Revenue (total_price from paid bookings)
+    const revenueResult = await Booking.aggregate([
+      {
+        $match: {
+          ...req.tenantFilter,
+          status: 'paid',
+          deleted: { $ne: true },
+          ...dateFilter
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: '$total_price' }
+        }
+      }
+    ]);
+    
+    // Calculate Advances (advance_amount from advance_paid bookings)
+    const advancesResult = await Booking.aggregate([
+      {
+        $match: {
+          ...req.tenantFilter,
+          status: 'advance_paid',
+          deleted: { $ne: true },
+          ...dateFilter
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: '$advance_amount' }
+        }
+      }
+    ]);
+    
+    // Calculate previous period for trends
+    let prevDateFilter = {};
+    if (timePeriod !== 'custom') {
+      const prevRange = getDateRange(timePeriod, 'prev');
+      if (prevRange) {
+        prevDateFilter = {
+          checkin_date: {
+            $gte: prevRange.startDate,
+            $lte: prevRange.endDate
+          }
+        };
+      }
+    }
+    
+    // Previous period revenue for trend calculation
+    const prevRevenueResult = await Booking.aggregate([
+      {
+        $match: {
+          ...req.tenantFilter,
+          status: 'paid',
+          deleted: { $ne: true },
+          ...prevDateFilter
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: '$total_price' }
+        }
+      }
+    ]);
+    
+    const prevAdvancesResult = await Booking.aggregate([
+      {
+        $match: {
+          ...req.tenantFilter,
+          status: 'advance_paid',
+          deleted: { $ne: true },
+          ...prevDateFilter
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: '$advance_amount' }
+        }
+      }
+    ]);
+    
+    const revenue = revenueResult[0]?.total || 0;
+    const advances = advancesResult[0]?.total || 0;
+    const prevRevenue = prevRevenueResult[0]?.total || 0;
+    const prevAdvances = prevAdvancesResult[0]?.total || 0;
+    
+    // Calculate trends
+    const revenueTrend = prevRevenue > 0 
+      ? ((revenue - prevRevenue) / prevRevenue * 100).toFixed(1)
+      : '0.0';
+    const advancesTrend = prevAdvances > 0
+      ? ((advances - prevAdvances) / prevAdvances * 100).toFixed(1)
+      : '0.0';
+    
+    const stats = {
       revenue: {
         value: totalRevenue,
         trend: `${totalRevenue > 0 ? '+' : ''}0.0%`,
@@ -189,120 +315,58 @@ router.get("/expense-comparison", protect, async (req, res) => {
         
         return Object.values(monthlyData).sort((a, b) => a.date - b.date);
       } else {
-        // Group by month-year for month view
-        const monthlyData = {};
-        expenses.forEach(exp => {
-          const date = new Date(exp.date);
-          const monthYear = `${date.toLocaleString('default', { month: 'short' })} ${date.getFullYear()}`;
-          
-          if (!monthlyData[monthYear]) {
-            monthlyData[monthYear] = {
-              label: monthYear,
-              value: 0,
-              date: date
-            };
+        dateRange = getDateRange(timePeriod, comparison);
+      }
+      
+      if (!dateRange) continue;
+      
+      // Aggregate revenue by date
+      const groupBy = timePeriod === 'year' 
+        ? { $month: '$checkin_date' }
+        : { $dayOfMonth: '$checkin_date' };
+      
+      const aggregation = await Booking.aggregate([
+        {
+          $match: {
+            ...req.tenantFilter,
+            status: 'paid',
+            deleted: { $ne: true },
+            checkin_date: {
+              $gte: dateRange.startDate,
+              $lte: dateRange.endDate
+            }
           }
-          
-          const amount = parseDecimal(exp.amount);
-          monthlyData[monthYear].value += amount;
-          console.log(`  Added ${amount} to ${monthYear}, total: ${monthlyData[monthYear].value}`);
-        });
-        
-        return Object.values(monthlyData).sort((a, b) => a.date - b.date);
-      }
-    };
-
-    // Process data based on comparisons
-    if (comparisonsList.includes('now')) {
-      const groupByYear = timePeriod === 'year';
-      result.nowData = getExpenseData(allExpenses, groupByYear);
-      console.log(`✅ Now data ready: ${result.nowData.length} periods`);
+        },
+        {
+          $group: {
+            _id: groupBy,
+            total: { $sum: '$total_price' },
+            date: { $first: '$checkin_date' }
+          }
+        },
+        {
+          $sort: { _id: 1 }
+        }
+      ]);
+      
+      // Format data points
+      const dataPoints = aggregation.map(item => ({
+        label: timePeriod === 'year' 
+          ? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][item._id - 1]
+          : item._id.toString(),
+        value: parseFloat(item.total.toString()), // Convert Decimal128 to number
+        date: item.date
+      }));
+      
+      // Fill in missing dates with 0
+      const filledData = fillMissingDates(dataPoints, dateRange, timePeriod);
+      
+      if (comparison === 'prev') result.prevData = filledData;
+      else if (comparison === 'now') result.nowData = filledData;
+      else result.nextData = filledData;
     }
-
-    if (comparisonsList.includes('prev')) {
-      // For prev, you can implement date filtering if needed
-      result.prevData = [];
-      console.log("⚠️ Prev data not implemented yet");
-    }
-
-    if (comparisonsList.includes('next')) {
-      // Future data is empty
-      result.nextData = [];
-    }
-
-    console.log(`✅ Expense comparison ready:`, {
-      prevCount: result.prevData.length,
-      nowCount: result.nowData.length,
-      nextCount: result.nextData.length,
-      totalAmount: result.nowData.reduce((sum, d) => sum + d.value, 0)
-    });
-
-    res.json(result);
-
-  } catch (err) {
-    console.error("❌ Expense Comparison Error:", err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// --------------------------------------------------
-// ✅ FIXED: GET EXPENSE CATEGORIES DATA
-// --------------------------------------------------
-router.get("/expense-categories", protect, async (req, res) => {
-  try {
-    const { timePeriod = 'month', startDate: customStart, endDate: customEnd } = req.query;
     
-    console.log("📊 Fetching expense categories for timePeriod:", timePeriod);
-
-    // ✅ FIX: Get ALL expenses from database (no date filter)
-    const expenses = await Expense.find({ 
-      deleted: false 
-    });
-
-    console.log(`📊 Found ${expenses.length} total expenses`);
-
-    if (expenses.length === 0) {
-      console.log("⚠️ No expenses found");
-      return res.json([]);
-    }
-
-    // Group by category
-    const categoryMap = {};
-    const categoryColors = {
-      'Light Bill': '#FF6B6B',
-      'Water Bill': '#4ECDC4',
-      'Internet Bill': '#45B7D1',
-      'Salary': '#FFA07A',
-      'Cleaning': '#98D8C8',
-      'Rent': '#F7DC6F',
-      'Purchases': '#BB8FCE'
-    };
-
-    expenses.forEach(exp => {
-      const category = exp.category || 'Other';
-      
-      if (!categoryMap[category]) {
-        categoryMap[category] = {
-          category,
-          amount: 0,
-          color: categoryColors[category] || '#95A5A6'
-        };
-      }
-      
-      const amount = parseDecimal(exp.amount);
-      categoryMap[category].amount += amount;
-      console.log(`  ${category}: +${amount} = ${categoryMap[category].amount}`);
-    });
-
-    const result = Object.values(categoryMap)
-      .filter(cat => cat.amount > 0)
-      .sort((a, b) => b.amount - a.amount);
-
-    console.log(`✅ Categories ready: ${result.length} categories`);
-    result.forEach(cat => {
-      console.log(`   ${cat.category}: Rs. ${cat.amount.toFixed(2)}`);
-    });
-
+    console.log('✅ Revenue comparison data prepared');
     res.json(result);
 
   } catch (err) {
@@ -331,65 +395,10 @@ router.get("/revenue-comparison", protect, async (req, res) => {
       nowData: [],
       nextData: []
     };
-
-    // Get revenue data from bookings
-    const getRevenueData = async (start, end) => {
-      const bookings = await Booking.find({
-        checkin_date: { $gte: start, $lte: end }
-      });
-
-      if (timePeriod === 'year') {
-        // Group by month
-        const monthlyData = {};
-        bookings.forEach(booking => {
-          const month = new Date(booking.checkin_date).getMonth();
-          const monthName = new Date(2000, month).toLocaleString('default', { month: 'short' });
-          if (!monthlyData[month]) {
-            monthlyData[month] = {
-              label: monthName,
-              value: 0,
-              date: new Date(new Date(booking.checkin_date).getFullYear(), month, 1)
-            };
-          }
-          monthlyData[month].value += parseDecimal(booking.total_price);
-        });
-        return Object.values(monthlyData).sort((a, b) => a.date - b.date);
-      } else {
-        // Group by day
-        const dailyData = {};
-        bookings.forEach(booking => {
-          const day = new Date(booking.checkin_date).toISOString().split('T')[0];
-          if (!dailyData[day]) {
-            dailyData[day] = {
-              label: new Date(booking.checkin_date).getDate().toString(),
-              value: 0,
-              date: new Date(booking.checkin_date)
-            };
-          }
-          dailyData[day].value += parseDecimal(booking.total_price);
-        });
-        return Object.values(dailyData).sort((a, b) => a.date - b.date);
-      }
-    };
-
-    if (comparisonsList.includes('prev')) {
-      const periodLength = endDate - startDate;
-      const prevStart = new Date(startDate.getTime() - periodLength);
-      const prevEnd = new Date(startDate.getTime() - 1);
-      result.prevData = await getRevenueData(prevStart, prevEnd);
-    }
-
-    if (comparisonsList.includes('now')) {
-      result.nowData = await getRevenueData(startDate, endDate);
-    }
-
-    if (comparisonsList.includes('next')) {
-      const periodLength = endDate - startDate;
-      const nextStart = new Date(endDate.getTime() + 1);
-      const nextEnd = new Date(endDate.getTime() + periodLength);
-      result.nextData = await getRevenueData(nextStart, nextEnd);
-    }
-
+    
+    // TODO: Implement when Expense model is ready
+    // Add ...req.tenantFilter to $match when implemented
+    
     res.json(result);
 
   } catch (err) {

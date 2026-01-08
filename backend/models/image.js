@@ -30,6 +30,12 @@ const imageSchema = new mongoose.Schema(
       enum: ["general", "profile", "document", "nic", "license"],
       default: "general",
     },
+    clientId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Client',
+    required: true,
+    index: true
+  }
   },
   { timestamps: true }
 );
