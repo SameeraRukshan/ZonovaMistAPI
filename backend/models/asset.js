@@ -23,10 +23,7 @@ const assetSchema = new mongoose.Schema({
   deletedAt: { type: Date, default: null },
   deletedBy: { type: String, default: null },
 }, { timestamps: true });
-
-// Indexes for common queries
 assetSchema.index({ deleted: 1, category: 1 });
 assetSchema.index({ deleted: 1, createdAt: -1 });
 assetSchema.index({ deleted: 1, clientId: 1, createdAt: -1 });
-
 module.exports = mongoose.model('Asset', assetSchema);
