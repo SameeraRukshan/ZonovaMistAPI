@@ -2,7 +2,7 @@ name: Deploy to Cloud Run (DEV)
 
 on:
   push:
-    branches: [ "dev", "ci-cd" ]  # Trigger only on 'dev' branch updates
+    branches: [ "dev" ]  # Trigger only on 'dev' branch updates
 
 env:
   PROJECT_ID: zonova-mist-api
