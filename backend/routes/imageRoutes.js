@@ -11,6 +11,7 @@ const Room = require("../models/room");
 const Hotel = require("../models/hotel");
 const Booking = require("../models/booking");
 const Staff = require("../models/staff");
+const Asset = require("../models/asset");
 const authMiddleware = require("../middleware/authMiddleware");
 const { addTenantId } = require("../middleware/authMiddleware");
 
@@ -87,9 +88,9 @@ router.post("/upload", upload.array("photos", 10), async (req, res) => {
 
     const normalizedType = String(moduleType).trim();
     
-    if (!["Room", "Hotel", "Booking", "Staff", "StaffDP"].includes(normalizedType))
+    if (!["Room", "Hotel", "Booking", "Staff", "StaffDP", "Asset"].includes(normalizedType))
       return res.status(400).json({ 
-        message: "Invalid moduleType (Room | Hotel | Booking | Staff | StaffDP)" 
+        message: "Invalid moduleType (Room | Hotel | Booking | Staff | StaffDP | Asset)" 
       });
 
     const Model =
@@ -101,6 +102,8 @@ router.post("/upload", upload.array("photos", 10), async (req, res) => {
         ? Booking
         : normalizedType === "Staff" || normalizedType === "StaffDP"
         ? Staff
+        : normalizedType === "Asset"
+        ? Asset
         : null;
 
     if (!Model) {
@@ -169,9 +172,9 @@ router.get("/:moduleType/:moduleId", async (req, res) => {
     const { moduleType, moduleId } = req.params;
     const normalizedType = String(moduleType).trim();
 
-    if (!["Room", "Hotel", "Booking", "Staff", "StaffDP"].includes(normalizedType))
+    if (!["Room", "Hotel", "Booking", "Staff", "StaffDP", "Asset"].includes(normalizedType))
       return res.status(400).json({ 
-        message: "Invalid moduleType (Room | Hotel | Booking | Staff | StaffDP)" 
+        message: "Invalid moduleType (Room | Hotel | Booking | Staff | StaffDP | Asset)" 
       });
 
     if (!mongoose.Types.ObjectId.isValid(moduleId))
