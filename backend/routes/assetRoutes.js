@@ -4,6 +4,7 @@ const Asset = require('../models/asset');
 const Image = require('../models/image');
 const cloudinary = require('../config/cloudinary');
 const auth = require('../middleware/authMiddleware');
+const { addTenantId } = require('../middleware/authMiddleware');
 
 // GET all assets (exclude soft-deleted) - tenant scoped
 router.get('/', auth, async (req, res) => {
@@ -19,7 +20,7 @@ router.get('/', auth, async (req, res) => {
 // POST create new asset - tenant scoped
 router.post('/', auth, async (req, res) => {
   try {
-    const asset = new Asset(auth.addTenantId(req, req.body));
+    const asset = new Asset(addTenantId(req, req.body));
     await asset.save();
     res.status(201).json(asset);
   } catch (err) {
