@@ -1,8 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const Expense = require("../models/expense");
-const authMiddleware = require("../middleware/authMiddleware"); // ⭐ Add this line
-const { addTenantId } = require("../middleware/authMiddleware");
+const authMiddleware = require("../middleware/authMiddleware");
+const { addTenantId } = authMiddleware;
 
 // Safe date parse
 const safeDate = (d) => {
