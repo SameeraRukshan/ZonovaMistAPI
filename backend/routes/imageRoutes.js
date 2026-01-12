@@ -41,6 +41,16 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
 });
 
+// Case-insensitive module type mapping
+const TYPE_MAP = {
+  room: "Room",
+  hotel: "Hotel",
+  booking: "Booking",
+  staff: "Staff",
+  staffdp: "StaffDP",
+  asset: "Asset",
+};
+
 // ✅ Helper to upload to Cloudinary
 async function uploadToCloudinary(fileBuffer, originalName, folderName) {
   return new Promise((resolve, reject) => {
@@ -73,8 +83,14 @@ async function uploadToCloudinary(fileBuffer, originalName, folderName) {
   });
 }
 
-// ✅ POST /api/images/upload
-router.post("/upload", upload.array("photos", 10), async (req, res) => {
+// ✅ POST /api/images/upload (supports photos | images | files)
+const uploadFields = upload.fields([
+  { name: "photos", maxCount: 10 },
+  { name: "images", maxCount: 10 },
+  { name: "files", maxCount: 10 },
+]);
+
+router.post("/upload", uploadFields, async (req, res) => {
   try {
     console.log("📸 Upload endpoint hit");
 
@@ -86,9 +102,9 @@ router.post("/upload", upload.array("photos", 10), async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(moduleId))
       return res.status(400).json({ message: "Invalid moduleId format" });
 
-    const normalizedType = String(moduleType).trim();
+    const normalizedType = TYPE_MAP[String(moduleType).trim().toLowerCase()];
     
-    if (!["Room", "Hotel", "Booking", "Staff", "StaffDP", "Asset"].includes(normalizedType))
+    if (!normalizedType)
       return res.status(400).json({ 
         message: "Invalid moduleType (Room | Hotel | Booking | Staff | StaffDP | Asset)" 
       });
@@ -118,12 +134,17 @@ router.post("/upload", upload.array("photos", 10), async (req, res) => {
     if (!target)
       return res.status(404).json({ message: `${normalizedType} not found` });
 
-    if (!req.files || req.files.length === 0)
-      return res.status(400).json({ message: "No images uploaded" });
+    const allFiles = [
+      ...(req.files?.photos || []),
+      ...(req.files?.images || []),
+      ...(req.files?.files || []),
+    ];
+    if (allFiles.length === 0)
+      return res.status(400).json({ message: "No images uploaded. Use fields: photos | images | files" });
 
     const results = [];
 
-    for (const file of req.files) {
+    for (const file of allFiles) {
       try {
         const folder = normalizedType.toLowerCase();
         const uploaded = await uploadToCloudinary(file.buffer, file.originalname, folder);
@@ -170,9 +191,9 @@ router.post("/upload", upload.array("photos", 10), async (req, res) => {
 router.get("/:moduleType/:moduleId", async (req, res) => {
   try {
     const { moduleType, moduleId } = req.params;
-    const normalizedType = String(moduleType).trim();
+    const normalizedType = TYPE_MAP[String(moduleType).trim().toLowerCase()];
 
-    if (!["Room", "Hotel", "Booking", "Staff", "StaffDP", "Asset"].includes(normalizedType))
+    if (!normalizedType)
       return res.status(400).json({ 
         message: "Invalid moduleType (Room | Hotel | Booking | Staff | StaffDP | Asset)" 
       });

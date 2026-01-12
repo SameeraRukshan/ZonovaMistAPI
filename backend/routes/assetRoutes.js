@@ -32,6 +32,7 @@ router.get('/:id', auth, async (req, res) => {
   try {
     const asset = await Asset.findOne({ _id: req.params.id, ...(req.tenantFilter || {}) });
     if (!asset || asset.deleted) return res.status(404).json({ message: 'Asset not found' });
+    // Return the full asset object, including any stored photo URLs
     res.json(asset);
   } catch (err) {
     res.status(500).json({ error: err.message });
