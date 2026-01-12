@@ -44,6 +44,7 @@ app.use('/api/invoices', require('./routes/invoiceRoutes'));
 app.use('/api/dashboard', require('./routes/dashboardRoutes'));
 app.use('/api/staff', require('./routes/staffRoutes')); 
 app.use('/api/todos', require('./routes/todoRoutes'));
+app.use('/api/assets', require('./routes/assetRoutes'));
 app.use('/api/expenses', require('./routes/expenseRoutes'));
 
 // Swagger
