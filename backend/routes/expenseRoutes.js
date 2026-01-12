@@ -16,7 +16,7 @@ router.use(authMiddleware);
 router.post("/", async (req, res) => {
   try {
     console.log("📥 Received expense data:", JSON.stringify(req.body, null, 2));
-    console.log("👤 User ID:", req.user.id); // ⭐ Log user ID
+    console.log("👤 Client ID:", req.user.clientId); // ⭐ Log client ID
     
     const { category, title, amount, date, description, images } = req.body;
 
@@ -44,7 +44,7 @@ router.post("/", async (req, res) => {
       date: safeDate(date),
       description: description || "",
       images: imageArray,
-      clientId: req.user.id, // ⭐⭐⭐ Add this line
+      clientId: req.user.clientId, // ⭐⭐⭐ Add this line
     });
 
     const saved = await expense.save();
@@ -60,10 +60,10 @@ router.post("/", async (req, res) => {
 // GET ALL EXPENSES
 router.get("/", async (req, res) => {
   try {
-    console.log("📋 Fetching expenses for user:", req.user.id); // ⭐ Log user ID
+    console.log("📋 Fetching expenses for client:", req.user.clientId); // ⭐ Log client ID
     const list = await Expense.find({ 
       deleted: false,
-      clientId: req.user.id // ⭐⭐⭐ Filter by user
+      clientId: req.user.clientId // ⭐⭐⭐ Filter by client
     }).sort({ createdAt: -1 });
     console.log(`✅ Found ${list.length} expenses`);
     res.json(list);
@@ -79,7 +79,7 @@ router.get("/:id", async (req, res) => {
     console.log("🔍 Fetching expense:", req.params.id);
     const exp = await Expense.findOne({ // ⭐ Changed from findById
       _id: req.params.id,
-      clientId: req.user.id // ⭐⭐⭐ Filter by user
+      clientId: req.user.clientId // ⭐⭐⭐ Filter by client
     });
     if (!exp || exp.deleted) {
       console.error("❌ Expense not found");
@@ -99,7 +99,7 @@ router.put("/:id", async (req, res) => {
     console.log("📝 Updating expense:", req.params.id);
     const exp = await Expense.findOne({ // ⭐ Changed from findById
       _id: req.params.id,
-      clientId: req.user.id // ⭐⭐⭐ Filter by user
+      clientId: req.user.clientId // ⭐⭐⭐ Filter by client
     });
     if (!exp || exp.deleted) {
       console.error("❌ Expense not found");
@@ -141,7 +141,7 @@ router.delete("/:id", async (req, res) => {
     console.log("🗑️ Deleting expense:", req.params.id);
     const exp = await Expense.findOne({ // ⭐ Changed from findById
       _id: req.params.id,
-      clientId: req.user.id // ⭐⭐⭐ Filter by user
+      clientId: req.user.clientId // ⭐⭐⭐ Filter by client
     });
     if (!exp || exp.deleted) {
       console.error("❌ Expense not found");
