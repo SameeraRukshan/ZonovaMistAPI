@@ -19,15 +19,29 @@ const imageSchema = new mongoose.Schema(
     moduleType: {
       type: String,
       required: true,
-      enum: ["Room", "Hotel", "Booking"],
+      enum: ["Room", "Hotel", "Booking", "Staff", "StaffDP", "Asset"],
     },
     uploadedBy: {
       type: String,
       default: "admin",
     },
+    imageType: {
+      type: String,
+      enum: ["general", "profile", "document", "nic", "license"],
+      default: "general",
+    },
+    clientId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Client',
+    required: true,
+    index: true
+  }
   },
   { timestamps: true }
 );
 
-// ✅ Export properly
+// Index for faster queries
+imageSchema.index({ moduleId: 1, moduleType: 1 });
+imageSchema.index({ public_id: 1 });
+
 module.exports = mongoose.model("Image", imageSchema);

@@ -1,14 +1,23 @@
 const express = require('express');
 const router = express.Router();
 const Hotel = require('../models/hotel');
+const authMiddleware = require('../middleware/authMiddleware');
+const { addTenantId } = require('../middleware/authMiddleware');
+
+// Apply auth middleware to all routes
+router.use(authMiddleware);
 
 // GET all hotels
 router.get('/', async (req, res) => {
   try {
     const { city, starRating } = req.query;
-    let query = {};
+    
+    // Start with tenant filter
+    let query = { ...req.tenantFilter };
+    
     if (city) query['location.city'] = city;
     if (starRating) query.starRating = starRating;
+    
     const hotels = await Hotel.find(query).sort({ createdAt: -1 });
     res.json(hotels);
   } catch (err) {
@@ -19,7 +28,10 @@ router.get('/', async (req, res) => {
 // GET hotel by ID
 router.get('/:id', async (req, res) => {
   try {
-    const hotel = await Hotel.findById(req.params.id);
+    const hotel = await Hotel.findOne({ 
+      _id: req.params.id, 
+      ...req.tenantFilter 
+    });
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
     res.json(hotel);
   } catch (err) {
@@ -36,12 +48,14 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ message: 'Name, City, and Phone are required' });
     }
 
-    const hotel = new Hotel({
+    // Add clientId to hotel data
+    const hotelData = addTenantId(req, {
       ...req.body,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
 
+    const hotel = new Hotel(hotelData);
     const newHotel = await hotel.save();
     res.status(201).json(newHotel);
   } catch (err) {
@@ -54,13 +68,20 @@ router.patch('/:id', async (req, res) => {
   try {
     const updateData = { ...req.body, updatedAt: new Date() };
 
+    // Prevent clientId modification
+    delete updateData.clientId;
+
     // If location is being updated, ensure city/address keys
     if (updateData.location) {
       updateData.location.city = updateData.location.city || '';
       updateData.location.address = updateData.location.address || '';
     }
 
-    const hotel = await Hotel.findByIdAndUpdate(req.params.id, updateData, { new: true });
+    const hotel = await Hotel.findOneAndUpdate(
+      { _id: req.params.id, ...req.tenantFilter },
+      updateData,
+      { new: true }
+    );
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
     res.json(hotel);
   } catch (err) {
@@ -71,7 +92,10 @@ router.patch('/:id', async (req, res) => {
 // DELETE hotel
 router.delete('/:id', async (req, res) => {
   try {
-    const hotel = await Hotel.findByIdAndDelete(req.params.id);
+    const hotel = await Hotel.findOneAndDelete({ 
+      _id: req.params.id, 
+      ...req.tenantFilter 
+    });
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
     res.json({ message: 'Hotel deleted successfully' });
   } catch (err) {

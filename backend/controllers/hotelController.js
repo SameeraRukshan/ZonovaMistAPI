@@ -1,10 +1,13 @@
 const Hotel = require('../models/hotel');
+const { addTenantId } = require('../middleware/authMiddleware');
 
 // ✅ Get all hotels (with optional filters)
 const getHotels = async (req, res) => {
   try {
     const { city, starRating } = req.query;
-    let query = {};
+    
+    // Start with tenant filter
+    let query = { ...req.tenantFilter };
 
     if (city) query['location.city'] = city;
     if (starRating) query.starRating = starRating;
@@ -19,7 +22,11 @@ const getHotels = async (req, res) => {
 // ✅ Get a single hotel by ID
 const getHotelById = async (req, res) => {
   try {
-    const hotel = await Hotel.findById(req.params.id);
+    // Combine _id with tenant filter
+    const hotel = await Hotel.findOne({ 
+      _id: req.params.id, 
+      ...req.tenantFilter 
+    });
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
     res.json(hotel);
   } catch (err) {
@@ -30,7 +37,9 @@ const getHotelById = async (req, res) => {
 // ✅ Create a new hotel
 const createHotel = async (req, res) => {
   try {
-    const newHotel = new Hotel(req.body);
+    // Automatically add clientId to the hotel data
+    const hotelData = addTenantId(req, req.body);
+    const newHotel = new Hotel(hotelData);
     const savedHotel = await newHotel.save();
     res.status(201).json(savedHotel);
   } catch (err) {
@@ -41,8 +50,9 @@ const createHotel = async (req, res) => {
 // ✅ Update an existing hotel
 const updateHotel = async (req, res) => {
   try {
-    const updatedHotel = await Hotel.findByIdAndUpdate(
-      req.params.id,
+    // Only update if hotel belongs to user's tenant
+    const updatedHotel = await Hotel.findOneAndUpdate(
+      { _id: req.params.id, ...req.tenantFilter },
       req.body,
       { new: true }
     );
@@ -56,7 +66,11 @@ const updateHotel = async (req, res) => {
 // ✅ Delete a hotel
 const deleteHotel = async (req, res) => {
   try {
-    const deletedHotel = await Hotel.findByIdAndDelete(req.params.id);
+    // Only delete if hotel belongs to user's tenant
+    const deletedHotel = await Hotel.findOneAndDelete({ 
+      _id: req.params.id, 
+      ...req.tenantFilter 
+    });
     if (!deletedHotel) return res.status(404).json({ message: 'Hotel not found' });
     res.json({ message: 'Hotel deleted successfully' });
   } catch (err) {

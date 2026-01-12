@@ -1,0 +1,38 @@
+name: Deploy to Cloud Run (DEV)
+
+on:
+  push:
+    branches: [ "dev" ]  # Trigger only on 'dev' branch updates
+
+env:
+  PROJECT_ID: zonova-mist-api
+  REGION: us-central1
+  SERVICE_NAME: zonova-mist-api-dev # Separate service for testing
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Google Auth
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+
+      - name: Deploy to Cloud Run
+        uses: 'google-github-actions/deploy-cloudrun@v2'
+        with:
+          service: ${{ env.SERVICE_NAME }}
+          region: ${{ env.REGION }}
+          source: ./backend   # <--- Important: Points to your backend folder
+          env_vars: |
+            MONGO_URI=${{ secrets.MONGO_URI_DEV }}
+            JWT_SECRET=${{ secrets.JWT_SECRET_DEV }}
+          flags: '--allow-unauthenticated'

@@ -1,29 +1,7 @@
-// backend/routes/expenseRoutes.js
 const express = require("express");
 const router = express.Router();
 const Expense = require("../models/expense");
-const jwt = require("jsonwebtoken");
-
-// 🔥 Authentication Middleware
-const protect = async (req, res, next) => {
-  let token;
-
-  if (req.headers.authorization && req.headers.authorization.startsWith("Bearer")) {
-    try {
-      token = req.headers.authorization.split(" ")[1];
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      req.user = decoded;
-      console.log("✅ User authenticated:", decoded.email);
-      next();
-    } catch (error) {
-      console.error("❌ Token verification failed:", error.message);
-      return res.status(401).json({ error: "Not authorized, token failed" });
-    }
-  } else {
-    console.error("❌ No token provided");
-    return res.status(401).json({ error: "Not authorized, no token" });
-  }
-};
+const authMiddleware = require("../middleware/authMiddleware"); // ⭐ Add this line
 
 // Safe date parse
 const safeDate = (d) => {
@@ -31,22 +9,22 @@ const safeDate = (d) => {
   return isNaN(dt) ? new Date() : dt;
 };
 
-// --------------------------------------------------
+// ⭐⭐⭐ Apply auth middleware to all routes ⭐⭐⭐
+router.use(authMiddleware);
+
 // CREATE EXPENSE
-// --------------------------------------------------
-router.post("/", protect, async (req, res) => {
+router.post("/", async (req, res) => {
   try {
     console.log("📥 Received expense data:", JSON.stringify(req.body, null, 2));
+    console.log("👤 User ID:", req.user.id); // ⭐ Log user ID
     
     const { category, title, amount, date, description, images } = req.body;
 
-    // Validation
     if (!category || !title) {
       console.error("❌ Missing required fields");
       return res.status(400).json({ error: "Category & title are required" });
     }
 
-    // Prepare images array (from Cloudinary)
     let imageArray = [];
     if (images && Array.isArray(images)) {
       imageArray = images.map(img => ({
@@ -59,7 +37,6 @@ router.post("/", protect, async (req, res) => {
       }));
     }
 
-    // Create expense
     const expense = new Expense({
       category,
       title,
@@ -67,6 +44,7 @@ router.post("/", protect, async (req, res) => {
       date: safeDate(date),
       description: description || "",
       images: imageArray,
+      clientId: req.user.id, // ⭐⭐⭐ Add this line
     });
 
     const saved = await expense.save();
@@ -79,13 +57,14 @@ router.post("/", protect, async (req, res) => {
   }
 });
 
-// --------------------------------------------------
 // GET ALL EXPENSES
-// --------------------------------------------------
-router.get("/", protect, async (req, res) => {
+router.get("/", async (req, res) => {
   try {
-    console.log("📋 Fetching all expenses...");
-    const list = await Expense.find({ deleted: false }).sort({ createdAt: -1 });
+    console.log("📋 Fetching expenses for user:", req.user.id); // ⭐ Log user ID
+    const list = await Expense.find({ 
+      deleted: false,
+      clientId: req.user.id // ⭐⭐⭐ Filter by user
+    }).sort({ createdAt: -1 });
     console.log(`✅ Found ${list.length} expenses`);
     res.json(list);
   } catch (err) {
@@ -94,13 +73,14 @@ router.get("/", protect, async (req, res) => {
   }
 });
 
-// --------------------------------------------------
 // GET SINGLE EXPENSE
-// --------------------------------------------------
-router.get("/:id", protect, async (req, res) => {
+router.get("/:id", async (req, res) => {
   try {
     console.log("🔍 Fetching expense:", req.params.id);
-    const exp = await Expense.findById(req.params.id);
+    const exp = await Expense.findOne({ // ⭐ Changed from findById
+      _id: req.params.id,
+      clientId: req.user.id // ⭐⭐⭐ Filter by user
+    });
     if (!exp || exp.deleted) {
       console.error("❌ Expense not found");
       return res.status(404).json({ error: "Not found" });
@@ -113,13 +93,14 @@ router.get("/:id", protect, async (req, res) => {
   }
 });
 
-// --------------------------------------------------
-// UPDATE EXPENSE (FIXED - REPLACES IMAGES)
-// --------------------------------------------------
-router.put("/:id", protect, async (req, res) => {
+// UPDATE EXPENSE
+router.put("/:id", async (req, res) => {
   try {
     console.log("📝 Updating expense:", req.params.id);
-    const exp = await Expense.findById(req.params.id);
+    const exp = await Expense.findOne({ // ⭐ Changed from findById
+      _id: req.params.id,
+      clientId: req.user.id // ⭐⭐⭐ Filter by user
+    });
     if (!exp || exp.deleted) {
       console.error("❌ Expense not found");
       return res.status(404).json({ error: "Not found" });
@@ -133,7 +114,6 @@ router.put("/:id", protect, async (req, res) => {
     if (date) exp.date = safeDate(date);
     if (description !== undefined) exp.description = description;
 
-    // ✅ REPLACE images instead of appending
     if (images && Array.isArray(images)) {
       const newImages = images.map(img => ({
         filename: img.filename || 'image.jpg',
@@ -143,8 +123,6 @@ router.put("/:id", protect, async (req, res) => {
         mimeType: img.mimeType || 'image/jpeg',
         uploadedAt: new Date()
       }));
-      
-      // ⬅️ REPLACE the entire images array (not push!)
       exp.images = newImages;
     }
 
@@ -157,13 +135,14 @@ router.put("/:id", protect, async (req, res) => {
   }
 });
 
-// --------------------------------------------------
-// DELETE EXPENSE (Soft Delete)
-// --------------------------------------------------
-router.delete("/:id", protect, async (req, res) => {
+// DELETE EXPENSE
+router.delete("/:id", async (req, res) => {
   try {
     console.log("🗑️ Deleting expense:", req.params.id);
-    const exp = await Expense.findById(req.params.id);
+    const exp = await Expense.findOne({ // ⭐ Changed from findById
+      _id: req.params.id,
+      clientId: req.user.id // ⭐⭐⭐ Filter by user
+    });
     if (!exp || exp.deleted) {
       console.error("❌ Expense not found");
       return res.status(404).json({ error: "Not found" });
@@ -182,4 +161,3 @@ router.delete("/:id", protect, async (req, res) => {
 });
 
 module.exports = router;
-

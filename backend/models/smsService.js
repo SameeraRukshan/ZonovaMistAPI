@@ -9,7 +9,9 @@ function replacePlaceholders(template, data) {
     .replace('{roomNo}', data.roomNo || '')
     .replace('{checkInDate}', data.checkInDate ? new Date(data.checkInDate).toDateString() : '')
     .replace('{guestHouseName}', data.guestHouseName || '')
-    .replace('{hostName}', data.hostName || '');
+    .replace('{hostName}', data.hostName || '')
+    .replace('{advanceAmount}', data.advanceAmount || '')
+    .replace('{invoiceLink}', data.invoiceLink || '');
   console.log('Resulting message:', result);
   return result;
 }
@@ -39,12 +41,20 @@ async function sendBookingSMS(clientPhone, clientName, roomNo, checkInDate) {
       guestHouseName: settings.guestHouseName,
       hostName: settings.hostName,
     });
+        // 1. Remove all non-numeric characters using Regex (/\D/g matches non-digits)
+    let cleanNumber = clientPhone.replace(/[^0-9]/g, '');
+
+    // 2. Check length and format to Sri Lankan standard (94...)
+    if (cleanNumber.length >= 9) {
+      // slice(-9) grabs the last 9 characters
+      cleanNumber = `94${cleanNumber.slice(-9)}`;
+    }
 
     const params = new URLSearchParams();
     params.append('user_id', userId);
     params.append('api_key', apiKey);
     params.append('sender_id', senderId);
-    params.append('to', clientPhone);
+    params.append('to', cleanNumber);
     params.append('message', message);
 
     console.log('Sending SMS with params:', params.toString());
@@ -53,6 +63,123 @@ async function sendBookingSMS(clientPhone, clientName, roomNo, checkInDate) {
     return response.data;
   } catch (err) {
     console.error('Error sending booking SMS:', err.message, err.stack);
+    throw err;
+  }
+}
+
+// NEW: Send advance paid SMS with invoice link
+async function sendAdvancePaidSMS(clientPhone, clientName, roomNo, advanceAmount, invoiceLink) {
+  try {
+    console.log('📨 Sending advance paid SMS with invoice link...');
+    const settings = await Setting.findOne({});
+    if (!settings) {
+      console.error('No settings found in database');
+      throw new Error('Settings not found in database');
+    }
+
+    const userId = process.env.USER_ID;
+    const apiKey = process.env.API_KEY;
+    if (!userId || !apiKey) {
+      console.error('Missing USER_ID or API_KEY');
+      throw new Error('Missing Notify.lk credentials');
+    }
+
+    const senderId = settings.guestHouseName || 'Zonova Mist';
+    
+    // Use the advance paid template from settings
+    const template = settings.advancePaidSmsTemplate || 
+      'Dear {clientName}, advance payment of Rs. {advanceAmount} received for Room {roomNo}. View invoice: {invoiceLink} - {guestHouseName}';
+    
+    const message = replacePlaceholders(template, {
+      clientName,
+      roomNo,
+      advanceAmount: advanceAmount ? parseFloat(advanceAmount).toFixed(2) : '0.00',
+      invoiceLink,
+      guestHouseName: settings.guestHouseName,
+      hostName: settings.hostName,
+    });
+         // 1. Remove all non-numeric characters using Regex (/\D/g matches non-digits)
+    let cleanNumber = clientPhone.replace(/[^0-9]/g, '');
+
+    // 2. Check length and format to Sri Lankan standard (94...)
+    if (cleanNumber.length >= 9) {
+      // slice(-9) grabs the last 9 characters
+      cleanNumber = `94${cleanNumber.slice(-9)}`;
+    }
+    const params = new URLSearchParams();
+    params.append('user_id', userId);
+    params.append('api_key', apiKey);
+    params.append('sender_id', senderId);
+    params.append('to', cleanNumber);
+    params.append('message', message);
+
+    console.log('📤 Sending advance paid SMS:', message);
+    const response = await axios.post('https://app.notify.lk/api/v1/send', params.toString());
+    console.log('✅ Advance paid SMS sent:', response.data);
+    return response.data;
+  } catch (err) {
+    console.error('❌ Error sending advance paid SMS:', err.message, err.stack);
+    throw err;
+  }
+}
+
+// NEW: Send discount SMS to recent guests
+async function sendDiscountSMS(clientPhone, clientName) {
+  try {
+    console.log('🎁 Sending discount SMS to:', clientPhone);
+    const settings = await Setting.findOne({});
+    if (!settings) {
+      console.error('No settings found in database');
+      throw new Error('Settings not found in database');
+    }
+
+    const userId = process.env.USER_ID;
+    const apiKey = process.env.API_KEY;
+    if (!userId || !apiKey) {
+      console.error('Missing USER_ID or API_KEY');
+      throw new Error('Missing Notify.lk credentials');
+    }
+
+    const senderId = settings.guestHouseName || 'Zonova Mist';
+    
+    // Use the discount template from settings
+    const template = settings.discountSmsTemplate || 
+      'Missing the cool breeze of {location}? Stay at {guestHouseName} again {validityPeriod} and enjoy LKR {discountAmount} off per night. Call or WhatsApp us at {telephone}';
+    
+    const telephone = settings.telephone || '94728651815';
+    const discountAmount = settings.discountAmount || 4000;
+    const validityPeriod = settings.discountValidityPeriod || 'within a month';
+    const location = settings.guestHouseLocation || 'Ambewela';
+    
+    const message = template
+      .replace('{clientName}', clientName || '')
+      .replace('{location}', location)
+      .replace('{guestHouseName}', settings.guestHouseName || 'Zonova Mist')
+      .replace('{validityPeriod}', validityPeriod)
+      .replace('{discountAmount}', discountAmount.toString())
+      .replace('{telephone}', telephone);
+
+           // 1. Remove all non-numeric characters using Regex (/\D/g matches non-digits)
+    let cleanNumber = clientPhone.replace(/[^0-9]/g, '');
+
+    // 2. Check length and format to Sri Lankan standard (94...)
+    if (cleanNumber.length >= 9) {
+      // slice(-9) grabs the last 9 characters
+      cleanNumber = `94${cleanNumber.slice(-9)}`;
+    }
+    const params = new URLSearchParams();
+    params.append('user_id', userId);
+    params.append('api_key', apiKey);
+    params.append('sender_id', senderId);
+    params.append('to', cleanNumber);
+    params.append('message', message);
+
+    console.log('📤 Sending discount SMS:', message);
+    const response = await axios.post('https://app.notify.lk/api/v1/send', params.toString());
+    console.log('✅ Discount SMS sent:', response.data);
+    return response.data;
+  } catch (err) {
+    console.error('❌ Error sending discount SMS:', err.message, err.stack);
     throw err;
   }
 }
@@ -82,12 +209,19 @@ async function sendReminderSMS(clientPhone, clientName, roomNo, checkInDate) {
       guestHouseName: settings.guestHouseName,
       hostName: settings.hostName,
     });
+           // 1. Remove all non-numeric characters using Regex (/\D/g matches non-digits)
+    let cleanNumber = clientPhone.replace(/[^0-9]/g, '');
 
+    // 2. Check length and format to Sri Lankan standard (94...)
+    if (cleanNumber.length >= 9) {
+      // slice(-9) grabs the last 9 characters
+      cleanNumber = `94${cleanNumber.slice(-9)}`;
+    }
     const params = new URLSearchParams();
     params.append('user_id', userId);
     params.append('api_key', apiKey);
     params.append('sender_id', senderId);
-    params.append('to', clientPhone);
+    params.append('to', cleanNumber);
     params.append('message', message);
 
     console.log('Sending reminder SMS with params:', params.toString());
@@ -121,11 +255,19 @@ async function sendBirthdaySMS(clientPhone, clientName) {
       .replace('{guestHouseName}', settings.guestHouseName || 'Zonova Mist')
       .replace('{hostName}', settings.hostName || 'Team');
 
+           // 1. Remove all non-numeric characters using Regex (/\D/g matches non-digits)
+    let cleanNumber = clientPhone.replace(/[^0-9]/g, '');
+
+    // 2. Check length and format to Sri Lankan standard (94...)
+    if (cleanNumber.length >= 9) {
+      // slice(-9) grabs the last 9 characters
+      cleanNumber = `94${cleanNumber.slice(-9)}`;
+    }
     const params = new URLSearchParams();
     params.append('user_id', userId);
     params.append('api_key', apiKey);
     params.append('sender_id', senderId);
-    params.append('to', clientPhone);
+    params.append('to', cleanNumber);
     params.append('message', message);
 
     const response = await axios.post(
@@ -162,18 +304,25 @@ async function sendInvoiceSMS(clientPhone, message) {
     } catch (settingsErr) {
       console.warn('⚠️ Could not fetch settings, using default sender ID');
     }
+           // 1. Remove all non-numeric characters using Regex (/\D/g matches non-digits)
+    let cleanNumber = clientPhone.replace(/[^0-9]/g, '');
 
+    // 2. Check length and format to Sri Lankan standard (94...)
+    if (cleanNumber.length >= 9) {
+      // slice(-9) grabs the last 9 characters
+      cleanNumber = `94${cleanNumber.slice(-9)}`;
+    }
     const params = new URLSearchParams();
     params.append('user_id', userId);
     params.append('api_key', apiKey);
     params.append('sender_id', senderId);
-    params.append('to', clientPhone);
+    params.append('to', cleanNumber);
     params.append('message', message);
 
     console.log('📤 SMS Params:', {
       user_id: userId,
       sender_id: senderId,
-      to: clientPhone,
+      to: cleanNumber,
       message: message.substring(0, 50) + '...'
     });
 
@@ -199,4 +348,11 @@ async function sendInvoiceSMS(clientPhone, message) {
   }
 }
 
-module.exports = { sendBookingSMS, sendReminderSMS, sendBirthdaySMS, sendInvoiceSMS };
+module.exports = { 
+  sendBookingSMS, 
+  sendReminderSMS, 
+  sendBirthdaySMS, 
+  sendInvoiceSMS,
+  sendAdvancePaidSMS,  // Export the advance paid function
+  sendDiscountSMS       // Export the new discount function
+};
