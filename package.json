@@ -1,12 +1,11 @@
 {
   "name": "zonovamist_api",
   "version": "1.0.0",
-  "description": "🧠 Zonova Mist Admin – Backend Release Notes\r 🏷️ Version 4 (v1.0.0)",
+  "description": "🧠 Zonova Mist Admin – Backend Release Notes",
   "main": "backend/server.js",
   "scripts": {
-    "dev": "nodemon backend/server.js",
-    "dev:old": "nodemon index.js",
     "start": "node backend/server.js",
+    "dev": "nodemon backend/server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {

@@ -1,5 +1,5 @@
-// routes/dashboardRoutes.js
-const express = require('express');
+// backend/routes/dashboardRoutes.js
+const express = require("express");
 const router = express.Router();
 const Expense = require("../models/expense");
 const Booking = require("../models/booking");
@@ -14,27 +14,20 @@ const protect = async (req, res, next) => {
       token = req.headers.authorization.split(" ")[1];
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       req.user = decoded;
-      req.tenantFilter = { clientId: decoded.clientId };
       next();
     } catch (error) {
       console.error("❌ Token verification failed:", error.message);
-      return res.status(401).json({ message: "Not authorized, token failed" });
+      return res.status(401).json({ error: "Not authorized, token failed" });
     }
   } else {
-    return res.status(401).json({ message: "Not authorized, no token" });
+    return res.status(401).json({ error: "Not authorized, no token" });
   }
 };
 
-// Apply protect middleware to all routes
-router.use(protect);
-
 // Helper function to parse Decimal128
 const parseDecimal = (val) => {
-  if (val === null || val === undefined) return 0;
-  if (typeof val === 'number') return val;
-  if (val.$numberDecimal) return parseFloat(val.$numberDecimal);
-  if (typeof val === 'string') return parseFloat(val) || 0;
-  return 0;
+  if (!val) return 0;
+  return parseFloat(val.toString());
 };
 
 // Helper function to get date range based on time period
@@ -63,16 +56,40 @@ const getDateRange = (timePeriod, customStartDate, customEndDate) => {
   return { startDate, endDate };
 };
 
-/**
- * GET /dashboard/stats - Get dashboard statistics
- */
-router.get('/stats', async (req, res) => {
+// --------------------------------------------------
+// GET DASHBOARD STATS
+// --------------------------------------------------
+router.get("/stats", protect, async (req, res) => {
   try {
-    console.log('📊 Fetching dashboard stats');
     const { timePeriod = 'month', startDate: customStart, endDate: customEnd } = req.query;
+    
     const { startDate, endDate } = getDateRange(timePeriod, customStart, customEnd);
+    
+    console.log("📊 Fetching stats from", startDate, "to", endDate);
 
-    // Get previous period for comparison
+    // Get expenses for current period
+    const expenses = await Expense.find({
+      deleted: false,
+      date: { $gte: startDate, $lte: endDate }
+    });
+
+    const totalExpenses = expenses.reduce((sum, exp) => sum + parseDecimal(exp.amount), 0);
+
+    // Get bookings for revenue calculation
+    const bookings = await Booking.find({
+      checkin_date: { $gte: startDate, $lte: endDate }
+    });
+
+    const totalRevenue = bookings.reduce((sum, booking) => 
+      sum + parseDecimal(booking.total_price), 0);
+    
+    const totalAdvances = bookings.reduce((sum, booking) => 
+      sum + parseDecimal(booking.advance_amount), 0);
+    
+    const totalCommission = bookings.reduce((sum, booking) => 
+      sum + parseDecimal(booking.commission_amount), 0);
+
+    // Calculate previous period for trend
     const periodLength = endDate - startDate;
     const prevStartDate = new Date(startDate.getTime() - periodLength);
     const prevEndDate = new Date(startDate.getTime() - 1);
