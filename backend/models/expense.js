@@ -22,7 +22,7 @@ const expenseSchema = new mongoose.Schema({
   images: [imageSchema],
   clientId: {  // ⭐⭐⭐ Add this field
     type: mongoose.Schema.Types.ObjectId, 
-    ref: 'User', 
+    ref: 'Client', 
     required: false  // Optional for backward compatibility
   },
   deleted: { type: Boolean, default: false },

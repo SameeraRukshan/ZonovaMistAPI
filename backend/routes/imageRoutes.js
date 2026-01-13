@@ -2,23 +2,13 @@
 const express = require("express");
 const router = express.Router();
 const multer = require("multer");
-const cloudinary = require("../config/cloudinary");
-const mongoose = require("mongoose");
-const path = require("path");
-
-const Image = require("../models/image");
-const Room = require("../models/room");
-const Hotel = require("../models/hotel");
-const Booking = require("../models/booking");
-const Staff = require("../models/staff");
-const Asset = require("../models/asset");
 const authMiddleware = require("../middleware/authMiddleware");
-const { addTenantId } = require("../middleware/authMiddleware");
+const imageController = require("../controllers/imageController");
 
 // Apply auth middleware to all routes
 router.use(authMiddleware);
 
-// ✅ Multer config (memory storage)
+// Multer config (memory storage)
 const upload = multer({
   storage: multer.memoryStorage(),
   fileFilter: (req, file, cb) => {
@@ -41,230 +31,228 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
 });
 
-// Case-insensitive module type mapping
-const TYPE_MAP = {
-  room: "Room",
-  hotel: "Hotel",
-  booking: "Booking",
-  staff: "Staff",
-  staffdp: "StaffDP",
-  asset: "Asset",
-};
-
-// ✅ Helper to upload to Cloudinary
-async function uploadToCloudinary(fileBuffer, originalName, folderName) {
-  return new Promise((resolve, reject) => {
-    const baseName = path
-      .parse(originalName)
-      .name.replace(/\s+/g, "_")
-      .replace(/[^a-zA-Z0-9_\-]/g, "")
-      .toLowerCase()
-      .slice(0, 60);
-
-    const publicId = `${baseName}_${Date.now()}`;
-    const isPDF = originalName.toLowerCase().endsWith('.pdf');
-
-    const uploadStream = cloudinary.uploader.upload_stream(
-      {
-        folder: `zonova_mist/${folderName}`,
-        public_id: publicId,
-        resource_type: isPDF ? "raw" : "image",
-      },
-      (error, result) => {
-        if (error) return reject(error);
-        resolve({
-          url: result.secure_url,
-          public_id: result.public_id,
-        });
-      }
-    );
-
-    uploadStream.end(fileBuffer);
-  });
-}
-
-// ✅ POST /api/images/upload (supports photos | images | files)
+// Upload fields configuration
 const uploadFields = upload.fields([
   { name: "photos", maxCount: 10 },
   { name: "images", maxCount: 10 },
   { name: "files", maxCount: 10 },
 ]);
 
-router.post("/upload", uploadFields, async (req, res) => {
-  try {
-    console.log("📸 Upload endpoint hit");
+/**
+ * @swagger
+ * tags:
+ *   name: Images
+ *   description: Image upload and management endpoints
+ */
 
-    const { moduleId, moduleType, uploadedBy, imageType } = req.body;
+/**
+ * @swagger
+ * /api/images/upload:
+ *   post:
+ *     summary: Upload images
+ *     description: Upload multiple images or files (supports photos, images, or files field names)
+ *     tags: [Images]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               photos:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: binary
+ *                 description: Image files (max 10)
+ *               images:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: binary
+ *                 description: Image files (max 10)
+ *               files:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: binary
+ *                 description: Files including PDFs (max 10)
+ *               moduleType:
+ *                 type: string
+ *                 description: Type of module (e.g., booking, hotel, asset)
+ *               moduleId:
+ *                 type: string
+ *                 description: ID of the associated module
+ *     responses:
+ *       201:
+ *         description: Images uploaded successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 images:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       public_id:
+ *                         type: string
+ *                       url:
+ *                         type: string
+ *                       secure_url:
+ *                         type: string
+ *       400:
+ *         description: Bad request - Invalid file type or size exceeded (max 10MB)
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       500:
+ *         description: Internal server error
+ */
+router.post("/upload", uploadFields, imageController.uploadImages);
 
-    if (!moduleId || !moduleType)
-      return res.status(400).json({ message: "moduleId and moduleType are required" });
+/**
+ * @swagger
+ * /api/images/{moduleType}/{moduleId}:
+ *   get:
+ *     summary: Get images by module
+ *     description: Retrieve all images associated with a specific module
+ *     tags: [Images]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: moduleType
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [booking, hotel, asset, expense, user]
+ *         description: Type of module
+ *       - in: path
+ *         name: moduleId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID of the module
+ *     responses:
+ *       200:
+ *         description: Images retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 images:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       _id:
+ *                         type: string
+ *                       public_id:
+ *                         type: string
+ *                       url:
+ *                         type: string
+ *                       secure_url:
+ *                         type: string
+ *                       moduleType:
+ *                         type: string
+ *                       moduleId:
+ *                         type: string
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       404:
+ *         description: No images found for this module
+ *       500:
+ *         description: Internal server error
+ */
+router.get("/:moduleType/:moduleId", imageController.getImagesByModule);
 
-    if (!mongoose.Types.ObjectId.isValid(moduleId))
-      return res.status(400).json({ message: "Invalid moduleId format" });
+/**
+ * @swagger
+ * /api/images/image:
+ *   delete:
+ *     summary: Delete image by public ID (body)
+ *     description: Delete an image using the public_id provided in the request body
+ *     tags: [Images]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - public_id
+ *             properties:
+ *               public_id:
+ *                 type: string
+ *                 description: Cloudinary public ID of the image to delete
+ *     responses:
+ *       200:
+ *         description: Image deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Bad request - public_id is required
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       404:
+ *         description: Image not found
+ *       500:
+ *         description: Internal server error
+ */
+router.delete("/image", express.json(), imageController.deleteImageByBody);
 
-    const normalizedType = TYPE_MAP[String(moduleType).trim().toLowerCase()];
-    
-    if (!normalizedType)
-      return res.status(400).json({ 
-        message: "Invalid moduleType (Room | Hotel | Booking | Staff | StaffDP | Asset)" 
-      });
-
-    const Model =
-      normalizedType === "Room"
-        ? Room
-        : normalizedType === "Hotel"
-        ? Hotel
-        : normalizedType === "Booking"
-        ? Booking
-        : normalizedType === "Staff" || normalizedType === "StaffDP"
-        ? Staff
-        : normalizedType === "Asset"
-        ? Asset
-        : null;
-
-    if (!Model) {
-      return res.status(400).json({ message: "Invalid module type" });
-    }
-
-    // ✅ Verify target belongs to user's tenant
-    const target = await Model.findOne({ 
-      _id: moduleId, 
-      ...req.tenantFilter 
-    });
-    if (!target)
-      return res.status(404).json({ message: `${normalizedType} not found` });
-
-    const allFiles = [
-      ...(req.files?.photos || []),
-      ...(req.files?.images || []),
-      ...(req.files?.files || []),
-    ];
-    if (allFiles.length === 0)
-      return res.status(400).json({ message: "No images uploaded. Use fields: photos | images | files" });
-
-    const results = [];
-
-    for (const file of allFiles) {
-      try {
-        const folder = normalizedType.toLowerCase();
-        const uploaded = await uploadToCloudinary(file.buffer, file.originalname, folder);
-
-        // ✅ Add clientId to image document
-        const imgData = addTenantId(req, {
-          url: uploaded.url,
-          public_id: uploaded.public_id,
-          moduleId,
-          moduleType: normalizedType,
-          uploadedBy: uploadedBy || "admin",
-          imageType: imageType || "general",
-        });
-
-        const imgDoc = await Image.create(imgData);
-
-        results.push({
-          url: uploaded.url,
-          public_id: uploaded.public_id,
-          dbId: imgDoc._id,
-        });
-        
-        console.log(`✅ Uploaded ${file.originalname} for ${normalizedType}`);
-      } catch (fileErr) {
-        console.error("❌ Error uploading a file:", fileErr);
-        results.push({
-          file: file.originalname,
-          error: fileErr.message || "Upload failed",
-        });
-      }
-    }
-
-    res.status(200).json({
-      message: "Upload completed",
-      results,
-    });
-  } catch (err) {
-    console.error("💥 Upload failed:", err);
-    res.status(500).json({ message: "Upload failed", error: err.message });
-  }
-});
-
-// ✅ GET /api/images/:moduleType/:moduleId
-router.get("/:moduleType/:moduleId", async (req, res) => {
-  try {
-    const { moduleType, moduleId } = req.params;
-    const normalizedType = TYPE_MAP[String(moduleType).trim().toLowerCase()];
-
-    if (!normalizedType)
-      return res.status(400).json({ 
-        message: "Invalid moduleType (Room | Hotel | Booking | Staff | StaffDP | Asset)" 
-      });
-
-    if (!mongoose.Types.ObjectId.isValid(moduleId))
-      return res.status(400).json({ message: "Invalid moduleId format" });
-
-    // ✅ Filter images by tenant
-    const images = await Image.find({
-      ...req.tenantFilter,
-      moduleId,
-      moduleType: normalizedType,
-    }).sort({ createdAt: -1 });
-
-    console.log(`✅ Found ${images.length} images for ${normalizedType} ${moduleId}`);
-    res.json(images);
-  } catch (err) {
-    console.error("💥 Fetch images error:", err);
-    res.status(500).json({ message: "Failed to fetch images", error: err.message });
-  }
-});
-
-// ✅ DELETE by public_id (in body)
-router.delete("/image", express.json(), async (req, res) => {
-  try {
-    const { public_id } = req.body;
-    if (!public_id) return res.status(400).json({ message: "public_id required" });
-
-    // ✅ Find image with tenant filter
-    const image = await Image.findOne({ 
-      public_id, 
-      ...req.tenantFilter 
-    });
-    if (!image) return res.status(404).json({ message: "Image not found" });
-
-    const resourceType = image.url.includes('.pdf') ? 'raw' : 'image';
-    
-    await cloudinary.uploader.destroy(public_id, { resource_type: resourceType });
-    await image.deleteOne();
-
-    console.log(`✅ Deleted image: ${public_id}`);
-    res.json({ message: "Image deleted successfully" });
-  } catch (err) {
-    console.error("💥 Delete image error:", err);
-    res.status(500).json({ message: "Image deletion failed", error: err.message });
-  }
-});
-
-// ✅ DELETE fallback (by encoded param)
-router.delete("/:public_id", async (req, res) => {
-  try {
-    const decoded = decodeURIComponent(req.params.public_id);
-    
-    // ✅ Find image with tenant filter
-    const image = await Image.findOne({ 
-      public_id: decoded, 
-      ...req.tenantFilter 
-    });
-    if (!image) return res.status(404).json({ message: "Image not found" });
-
-    const resourceType = image.url.includes('.pdf') ? 'raw' : 'image';
-    
-    await cloudinary.uploader.destroy(decoded, { resource_type: resourceType });
-    await image.deleteOne();
-
-    console.log(`✅ Deleted image: ${decoded}`);
-    res.json({ message: "Image deleted successfully" });
-  } catch (err) {
-    console.error("💥 Param delete error:", err);
-    res.status(500).json({ message: "Image deletion failed", error: err.message });
-  }
-});
+/**
+ * @swagger
+ * /api/images/{public_id}:
+ *   delete:
+ *     summary: Delete image by public ID (param)
+ *     description: Delete an image using the URL-encoded public_id as a path parameter
+ *     tags: [Images]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: public_id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: URL-encoded Cloudinary public ID of the image
+ *     responses:
+ *       200:
+ *         description: Image deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       404:
+ *         description: Image not found
+ *       500:
+ *         description: Internal server error
+ */
+router.delete("/:public_id", imageController.deleteImageByParam);
 
 module.exports = router;

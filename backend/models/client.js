@@ -16,8 +16,6 @@ const clientSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
-// Index for faster queries
-clientSchema.index({ code: 1 }, { unique: true });
 clientSchema.index({ isActive: 1 });
 
 module.exports = mongoose.model('Client', clientSchema);

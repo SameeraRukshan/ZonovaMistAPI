@@ -1,7 +1,9 @@
 const Hotel = require('../models/hotel');
 const { addTenantId } = require('../middleware/authMiddleware');
 
-// ✅ Get all hotels (with optional filters)
+/**
+ * GET all hotels (with optional filters)
+ */
 const getHotels = async (req, res) => {
   try {
     const { city, starRating } = req.query;
@@ -19,10 +21,11 @@ const getHotels = async (req, res) => {
   }
 };
 
-// ✅ Get a single hotel by ID
+/**
+ * GET a single hotel by ID
+ */
 const getHotelById = async (req, res) => {
   try {
-    // Combine _id with tenant filter
     const hotel = await Hotel.findOne({ 
       _id: req.params.id, 
       ...req.tenantFilter 
@@ -34,44 +37,71 @@ const getHotelById = async (req, res) => {
   }
 };
 
-// ✅ Create a new hotel
+/**
+ * POST create a new hotel
+ */
 const createHotel = async (req, res) => {
   try {
-    // Automatically add clientId to the hotel data
-    const hotelData = addTenantId(req, req.body);
-    const newHotel = new Hotel(hotelData);
-    const savedHotel = await newHotel.save();
-    res.status(201).json(savedHotel);
+    const { name, location, phone } = req.body;
+
+    // Validation
+    if (!name || !location?.city || !phone) {
+      return res.status(400).json({ message: 'Name, City, and Phone are required' });
+    }
+
+    // Add clientId to hotel data
+    const hotelData = addTenantId(req, {
+      ...req.body,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const hotel = new Hotel(hotelData);
+    const newHotel = await hotel.save();
+    res.status(201).json(newHotel);
   } catch (err) {
     res.status(400).json({ message: 'Failed to create hotel', error: err.message });
   }
 };
 
-// ✅ Update an existing hotel
+/**
+ * PATCH update an existing hotel
+ */
 const updateHotel = async (req, res) => {
   try {
-    // Only update if hotel belongs to user's tenant
-    const updatedHotel = await Hotel.findOneAndUpdate(
+    const updateData = { ...req.body, updatedAt: new Date() };
+
+    // Prevent clientId modification
+    delete updateData.clientId;
+
+    // If location is being updated, ensure city/address keys
+    if (updateData.location) {
+      updateData.location.city = updateData.location.city || '';
+      updateData.location.address = updateData.location.address || '';
+    }
+
+    const hotel = await Hotel.findOneAndUpdate(
       { _id: req.params.id, ...req.tenantFilter },
-      req.body,
+      updateData,
       { new: true }
     );
-    if (!updatedHotel) return res.status(404).json({ message: 'Hotel not found' });
-    res.json(updatedHotel);
+    if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
+    res.json(hotel);
   } catch (err) {
     res.status(400).json({ message: 'Failed to update hotel', error: err.message });
   }
 };
 
-// ✅ Delete a hotel
+/**
+ * DELETE a hotel
+ */
 const deleteHotel = async (req, res) => {
   try {
-    // Only delete if hotel belongs to user's tenant
-    const deletedHotel = await Hotel.findOneAndDelete({ 
+    const hotel = await Hotel.findOneAndDelete({ 
       _id: req.params.id, 
       ...req.tenantFilter 
     });
-    if (!deletedHotel) return res.status(404).json({ message: 'Hotel not found' });
+    if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
     res.json({ message: 'Hotel deleted successfully' });
   } catch (err) {
     res.status(500).json({ message: 'Failed to delete hotel', error: err.message });

@@ -1,106 +1,248 @@
 const express = require('express');
 const router = express.Router();
-const Hotel = require('../models/hotel');
 const authMiddleware = require('../middleware/authMiddleware');
-const { addTenantId } = require('../middleware/authMiddleware');
+const hotelController = require('../controllers/hotelController');
 
 // Apply auth middleware to all routes
 router.use(authMiddleware);
 
-// GET all hotels
-router.get('/', async (req, res) => {
-  try {
-    const { city, starRating } = req.query;
-    
-    // Start with tenant filter
-    let query = { ...req.tenantFilter };
-    
-    if (city) query['location.city'] = city;
-    if (starRating) query.starRating = starRating;
-    
-    const hotels = await Hotel.find(query).sort({ createdAt: -1 });
-    res.json(hotels);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
+/**
+ * @swagger
+ * tags:
+ *   name: Hotels
+ *   description: Hotel management endpoints
+ */
 
-// GET hotel by ID
-router.get('/:id', async (req, res) => {
-  try {
-    const hotel = await Hotel.findOne({ 
-      _id: req.params.id, 
-      ...req.tenantFilter 
-    });
-    if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
-    res.json(hotel);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
+/**
+ * @swagger
+ * /api/hotels:
+ *   get:
+ *     summary: Get all hotels
+ *     description: Retrieve all hotels excluding soft-deleted ones
+ *     tags: [Hotels]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of hotels retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   _id:
+ *                     type: string
+ *                   name:
+ *                     type: string
+ *                   address:
+ *                     type: string
+ *                   city:
+ *                     type: string
+ *                   phoneNumber:
+ *                     type: string
+ *                   email:
+ *                     type: string
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       500:
+ *         description: Internal server error
+ */
+router.get('/', hotelController.getHotels);
 
-// POST add hotel
-router.post('/', async (req, res) => {
-  try {
-    const { name, location, phone } = req.body;
+/**
+ * @swagger
+ * /api/hotels/{id}:
+ *   get:
+ *     summary: Get hotel by ID
+ *     description: Retrieve a single hotel by its ID
+ *     tags: [Hotels]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Hotel ID
+ *     responses:
+ *       200:
+ *         description: Hotel retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 _id:
+ *                   type: string
+ *                 name:
+ *                   type: string
+ *                 address:
+ *                   type: string
+ *                 city:
+ *                   type: string
+ *                 phoneNumber:
+ *                   type: string
+ *                 email:
+ *                   type: string
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       404:
+ *         description: Hotel not found
+ *       500:
+ *         description: Internal server error
+ */
+router.get('/:id', hotelController.getHotelById);
 
-    if (!name || !location?.city || !phone) {
-      return res.status(400).json({ message: 'Name, City, and Phone are required' });
-    }
+/**
+ * @swagger
+ * /api/hotels:
+ *   post:
+ *     summary: Create a new hotel
+ *     description: Create a new hotel in the system
+ *     tags: [Hotels]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 description: Hotel name
+ *               address:
+ *                 type: string
+ *                 description: Hotel address
+ *               city:
+ *                 type: string
+ *                 description: City where hotel is located
+ *               state:
+ *                 type: string
+ *                 description: State or province
+ *               country:
+ *                 type: string
+ *                 description: Country
+ *               postalCode:
+ *                 type: string
+ *                 description: Postal/ZIP code
+ *               phoneNumber:
+ *                 type: string
+ *                 description: Contact phone number
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 description: Contact email
+ *               website:
+ *                 type: string
+ *                 description: Hotel website URL
+ *               starRating:
+ *                 type: number
+ *                 minimum: 1
+ *                 maximum: 5
+ *                 description: Hotel star rating
+ *     responses:
+ *       201:
+ *         description: Hotel created successfully
+ *       400:
+ *         description: Bad request - Invalid input
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       500:
+ *         description: Internal server error
+ */
+router.post('/', hotelController.createHotel);
 
-    // Add clientId to hotel data
-    const hotelData = addTenantId(req, {
-      ...req.body,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
+/**
+ * @swagger
+ * /api/hotels/{id}:
+ *   patch:
+ *     summary: Update a hotel
+ *     description: Partially update an existing hotel
+ *     tags: [Hotels]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Hotel ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               address:
+ *                 type: string
+ *               city:
+ *                 type: string
+ *               state:
+ *                 type: string
+ *               country:
+ *                 type: string
+ *               postalCode:
+ *                 type: string
+ *               phoneNumber:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               website:
+ *                 type: string
+ *               starRating:
+ *                 type: number
+ *     responses:
+ *       200:
+ *         description: Hotel updated successfully
+ *       400:
+ *         description: Bad request - Invalid input
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       404:
+ *         description: Hotel not found
+ *       500:
+ *         description: Internal server error
+ */
+router.patch('/:id', hotelController.updateHotel);
 
-    const hotel = new Hotel(hotelData);
-    const newHotel = await hotel.save();
-    res.status(201).json(newHotel);
-  } catch (err) {
-    res.status(400).json({ message: err.message });
-  }
-});
-
-// PATCH update hotel
-router.patch('/:id', async (req, res) => {
-  try {
-    const updateData = { ...req.body, updatedAt: new Date() };
-
-    // Prevent clientId modification
-    delete updateData.clientId;
-
-    // If location is being updated, ensure city/address keys
-    if (updateData.location) {
-      updateData.location.city = updateData.location.city || '';
-      updateData.location.address = updateData.location.address || '';
-    }
-
-    const hotel = await Hotel.findOneAndUpdate(
-      { _id: req.params.id, ...req.tenantFilter },
-      updateData,
-      { new: true }
-    );
-    if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
-    res.json(hotel);
-  } catch (err) {
-    res.status(500).json({ message: 'Failed to update hotel', error: err.message });
-  }
-});
-
-// DELETE hotel
-router.delete('/:id', async (req, res) => {
-  try {
-    const hotel = await Hotel.findOneAndDelete({ 
-      _id: req.params.id, 
-      ...req.tenantFilter 
-    });
-    if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
-    res.json({ message: 'Hotel deleted successfully' });
-  } catch (err) {
-    res.status(500).json({ message: 'Failed to delete hotel', error: err.message });
-  }
-});
+/**
+ * @swagger
+ * /api/hotels/{id}:
+ *   delete:
+ *     summary: Delete a hotel
+ *     description: Soft delete a hotel by its ID
+ *     tags: [Hotels]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Hotel ID
+ *     responses:
+ *       200:
+ *         description: Hotel deleted successfully
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       404:
+ *         description: Hotel not found
+ *       500:
+ *         description: Internal server error
+ */
+router.delete('/:id', hotelController.deleteHotel);
 
 module.exports = router;
