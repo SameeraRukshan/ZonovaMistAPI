@@ -491,7 +491,7 @@ cron.schedule('0 8 * * *', async () => {
 const startServer = async () => {
   await connectDB(); // Wait for DB to connect FIRST
   
-  app.listen(PORT, () => {
+  server.listen(PORT, () => {
     console.log(`🚀 Server running on http://localhost:${PORT}`);
   });
 };
