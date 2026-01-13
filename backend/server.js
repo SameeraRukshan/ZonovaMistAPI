@@ -11,7 +11,6 @@ const http = require('http');
 const WebSocket = require('ws');
 
 dotenv.config();
-connectDB();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -489,10 +488,15 @@ cron.schedule('0 8 * * *', async () => {
   }
 });
 
-// Start server
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
-});
+const startServer = async () => {
+  await connectDB(); // Wait for DB to connect FIRST
+  
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on http://localhost:${PORT}`);
+  });
+};
+
+startServer();
 
 // Include any additional jobs
 console.log('⏰ Initializing cron jobs...');
