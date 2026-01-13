@@ -1,11 +1,11 @@
-const { sendInvoiceSMS } = require('../models/smsService');
+const { sendInvoiceSMS: sendSMS } = require('../models/smsService');
 const Booking = require('../models/booking');
 
 /**
  * Send invoice SMS to guest
  * POST /api/invoices/send-invoice-sms
  */
-const sendInvoiceSMS = async (req, res) => {
+const sendInvoiceSMSController = async (req, res) => {
   try {
     console.log('📋 Invoice SMS Request received:', req.body);
     
@@ -51,7 +51,7 @@ const sendInvoiceSMS = async (req, res) => {
     const message = `Dear ${booking.guest_name}, your invoice for Zonova Mist is ready. Total: Rs. ${parseFloat(total).toFixed(2)}. View it here: ${invoiceUrl}`;
 
     console.log('📨 Sending SMS...');
-    const smsResponse = await sendInvoiceSMS(booking.phone_no, message);
+    const smsResponse = await sendSMS(booking.phone_no, message);
     
     console.log('✅ SMS sent successfully');
 
@@ -121,7 +121,7 @@ const sendInvoiceNotification = async (req, res) => {
 };
 
 module.exports = {
-  sendInvoiceSmS,
+  sendInvoiceSMS: sendInvoiceSMSController,
   getInvoiceByBookingId,
   sendInvoiceNotification
 };

@@ -1,3 +1,4 @@
+// backend/routes/expenseRoutes.js
 const express = require("express");
 const router = express.Router();
 const authMiddleware = require("../middleware/authMiddleware");
@@ -244,3 +245,4 @@ router.put("/:id", expenseController.updateExpense);
 router.delete("/:id", expenseController.deleteExpense);
 
 module.exports = router;
+
