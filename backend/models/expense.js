@@ -24,10 +24,22 @@ const expenseSchema = new mongoose.Schema({
     ],
     required: true
   },
+<<<<<<< HEAD
   title: {
     type: String,
     required: true,
     trim: true
+=======
+  title: { type: String, required: true, trim: true },
+  amount: { type: mongoose.Schema.Types.Decimal128, required: true, default: 0 },
+  date: { type: Date, required: true, default: Date.now },
+  description: { type: String, default: '', trim: true },
+  images: [imageSchema],
+  clientId: {  // ⭐⭐⭐ Add this field
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'Client', 
+    required: false  // Optional for backward compatibility
+>>>>>>> swagger
   },
   amount: {
     type: mongoose.Schema.Types.Decimal128,

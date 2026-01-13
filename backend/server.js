@@ -12,7 +12,6 @@ const http = require('http');
 const WebSocket = require('ws');
 
 dotenv.config();
-connectDB();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -48,6 +47,7 @@ app.use('/api/invoices', require('./routes/invoiceRoutes'));
 app.use('/api/dashboard', require('./routes/dashboardRoutes'));
 app.use('/api/staff', require('./routes/staffRoutes')); 
 app.use('/api/todos', require('./routes/todoRoutes'));
+app.use('/api/assets', require('./routes/assetRoutes'));
 app.use('/api/expenses', require('./routes/expenseRoutes'));
 
 // Swagger
@@ -533,21 +533,15 @@ cron.schedule('0 8 * * *', async () => {
   }
 });
 
-// ✅ Global error handler
-app.use((err, req, res, next) => {
-  console.error('🔥 Server Error:', err.stack);
-  res.status(500).json({ 
-    error: 'Internal Server Error',
-    message: err.message 
+const startServer = async () => {
+  await connectDB(); // Wait for DB to connect FIRST
+  
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Server running on http://localhost:${PORT}`);
   });
-});
+};
 
-// Start server
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
-  console.log(`📡 API available at http://localhost:${PORT}/api`);
-  console.log(`💾 Expense API: http://localhost:${PORT}/api/expense`);
-});
+startServer();
 
 // Include any additional jobs
 console.log('⏰ Initializing cron jobs...');
