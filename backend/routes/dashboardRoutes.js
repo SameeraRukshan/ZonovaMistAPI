@@ -4,7 +4,6 @@ const router = express.Router();
 const authMiddleware = require('../middleware/authMiddleware');
 const dashboardController = require('../controllers/dashboardController');
 
-<<<<<<< HEAD
 // 🔥 Authentication Middleware
 const protect = async (req, res, next) => {
   let token;
@@ -169,7 +168,6 @@ router.get("/stats", protect, async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
-=======
 // Apply auth middleware to all routes
 router.use(authMiddleware);
 
@@ -179,7 +177,6 @@ router.use(authMiddleware);
  *   name: Dashboard
  *   description: Dashboard statistics and analytics endpoints
  */
->>>>>>> swagger
 
 /**
  * @swagger
