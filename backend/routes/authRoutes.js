@@ -7,7 +7,7 @@ const verifyToken = require('../middleware/authMiddleware');
 
 /**
  * @swagger
- * /register:
+ * /api/auth/register:
  *   post:
  *     summary: Register a new user
  *     tags: [Auth]
@@ -43,7 +43,7 @@ router.post('/register', register);
 
 /**
  * @swagger
- * /login:
+ * /api/auth/login:
  *   post:
  *     summary: Log in a user
  *     tags: [Auth]
@@ -95,7 +95,7 @@ router.post('/login', login);
 
 /**
  * @swagger
- * /profile:
+ * /api/auth/profile:
  *   get:
  *     summary: Get profile of the logged-in user
  *     tags: [Auth]
@@ -127,7 +127,7 @@ router.get('/profile', verifyToken, getProfile);
 
 /**
  * @swagger
- * /:
+ * /api/auth/:
  *   get:
  *     summary: Test endpoint
  *     tags: [Test]

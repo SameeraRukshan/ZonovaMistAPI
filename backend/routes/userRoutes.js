@@ -8,7 +8,7 @@ router.use(authMiddleware);
 
 /**
  * @swagger
- * /users:
+ * /api/users:
  *   get:
  *     summary: Get all users
  *     tags: [Users]
@@ -26,7 +26,7 @@ router.get('/', getAllUsers);
 
 /**
  * @swagger
- * /users/profile:
+ * /api/users/profile:
  *   get:
  *     summary: Get current user profile
  *     tags: [Users]
@@ -46,7 +46,7 @@ router.get('/profile', getMyProfile);
 
 /**
  * @swagger
- * /users/{id}:
+ * /api/users/{id}:
  *   get:
  *     summary: Get user by ID
  *     tags: [Users]

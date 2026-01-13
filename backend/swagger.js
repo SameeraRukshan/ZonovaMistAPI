@@ -5,9 +5,9 @@ const swaggerUi = require("swagger-ui-express");
 const swaggerDefinition = {
   openapi: "3.0.0",
   info: {
-    title: "My Node API",
+    title: "Zonova Mist API",
     version: "1.0.0",
-    description: "API documentation with Swagger",
+    description: "API documentation for the ZonovaMist Hotel Management System",
   },
   servers: [
     {
