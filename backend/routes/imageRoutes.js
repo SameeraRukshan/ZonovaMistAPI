@@ -38,16 +38,221 @@ const uploadFields = upload.fields([
   { name: "files", maxCount: 10 },
 ]);
 
-// POST /api/images/upload (supports photos | images | files)
+/**
+ * @swagger
+ * tags:
+ *   name: Images
+ *   description: Image upload and management endpoints
+ */
+
+/**
+ * @swagger
+ * /api/images/upload:
+ *   post:
+ *     summary: Upload images
+ *     description: Upload multiple images or files (supports photos, images, or files field names)
+ *     tags: [Images]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               photos:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: binary
+ *                 description: Image files (max 10)
+ *               images:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: binary
+ *                 description: Image files (max 10)
+ *               files:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: binary
+ *                 description: Files including PDFs (max 10)
+ *               moduleType:
+ *                 type: string
+ *                 description: Type of module (e.g., booking, hotel, asset)
+ *               moduleId:
+ *                 type: string
+ *                 description: ID of the associated module
+ *     responses:
+ *       201:
+ *         description: Images uploaded successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 images:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       public_id:
+ *                         type: string
+ *                       url:
+ *                         type: string
+ *                       secure_url:
+ *                         type: string
+ *       400:
+ *         description: Bad request - Invalid file type or size exceeded (max 10MB)
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       500:
+ *         description: Internal server error
+ */
 router.post("/upload", uploadFields, imageController.uploadImages);
 
-// GET /api/images/:moduleType/:moduleId
+/**
+ * @swagger
+ * /api/images/{moduleType}/{moduleId}:
+ *   get:
+ *     summary: Get images by module
+ *     description: Retrieve all images associated with a specific module
+ *     tags: [Images]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: moduleType
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [booking, hotel, asset, expense, user]
+ *         description: Type of module
+ *       - in: path
+ *         name: moduleId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID of the module
+ *     responses:
+ *       200:
+ *         description: Images retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 images:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       _id:
+ *                         type: string
+ *                       public_id:
+ *                         type: string
+ *                       url:
+ *                         type: string
+ *                       secure_url:
+ *                         type: string
+ *                       moduleType:
+ *                         type: string
+ *                       moduleId:
+ *                         type: string
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       404:
+ *         description: No images found for this module
+ *       500:
+ *         description: Internal server error
+ */
 router.get("/:moduleType/:moduleId", imageController.getImagesByModule);
 
-// DELETE by public_id (in body)
+/**
+ * @swagger
+ * /api/images/image:
+ *   delete:
+ *     summary: Delete image by public ID (body)
+ *     description: Delete an image using the public_id provided in the request body
+ *     tags: [Images]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - public_id
+ *             properties:
+ *               public_id:
+ *                 type: string
+ *                 description: Cloudinary public ID of the image to delete
+ *     responses:
+ *       200:
+ *         description: Image deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Bad request - public_id is required
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       404:
+ *         description: Image not found
+ *       500:
+ *         description: Internal server error
+ */
 router.delete("/image", express.json(), imageController.deleteImageByBody);
 
-// DELETE fallback (by encoded param)
+/**
+ * @swagger
+ * /api/images/{public_id}:
+ *   delete:
+ *     summary: Delete image by public ID (param)
+ *     description: Delete an image using the URL-encoded public_id as a path parameter
+ *     tags: [Images]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: public_id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: URL-encoded Cloudinary public ID of the image
+ *     responses:
+ *       200:
+ *         description: Image deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       404:
+ *         description: Image not found
+ *       500:
+ *         description: Internal server error
+ */
 router.delete("/:public_id", imageController.deleteImageByParam);
 
 module.exports = router;
