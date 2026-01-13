@@ -61,7 +61,7 @@ const invoiceController = require('../controllers/invoiceController');
  *       500:
  *         description: Internal server error
  */
-router.post('/send-invoice-sms', authMiddleware, invoiceController.sendInvoiceSmS);
+router.post('/send-invoice-sms', authMiddleware, invoiceController.sendInvoiceSMS);
 
 /**
  * @swagger

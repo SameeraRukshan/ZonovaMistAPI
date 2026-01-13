@@ -5,7 +5,7 @@ const Booking = require('../models/booking');
  * Send invoice SMS to guest
  * POST /api/invoices/send-invoice-sms
  */
-const sendInvoiceSmS = async (req, res) => {
+const sendInvoiceSMS = async (req, res) => {
   try {
     console.log('📋 Invoice SMS Request received:', req.body);
     
