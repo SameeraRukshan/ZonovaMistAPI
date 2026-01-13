@@ -1,5 +1,5 @@
 const Booking = require('../models/booking');
-const { sendBookingSMS, sendAdvancePaidSMS, sendDiscountSMS } = require('../models/smsService');
+const { sendAdvancePaidSMS, sendDiscountSMS } = require('../models/smsService');
 const cloudinary = require('../config/cloudinary');
 const { Readable } = require('stream');
 const { addTenantId } = require('../middleware/authMiddleware');
