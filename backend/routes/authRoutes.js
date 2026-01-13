@@ -10,6 +10,7 @@ const verifyToken = require('../middleware/authMiddleware');
  * /api/auth/register:
  *   post:
  *     summary: Register a new user
+ *     security: []
  *     tags: [Auth]
  *     requestBody:
  *       required: true
@@ -46,6 +47,7 @@ router.post('/register', register);
  * /api/auth/login:
  *   post:
  *     summary: Log in a user
+ *     security: []
  *     tags: [Auth]
  *     requestBody:
  *       required: true
