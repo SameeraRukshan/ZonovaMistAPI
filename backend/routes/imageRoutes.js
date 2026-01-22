@@ -205,7 +205,7 @@ router.post("/upload", uploadFields, async (req, res) => {
             errors: nicData.errors
           });
 
-          const savedNICExtraction = await NICExtraction.create(nicExtractionDoc);
+          await NICExtraction.create(nicExtractionDoc);
           
           console.log(`✅ NIC detected and saved for ${file.originalname}`);
           
