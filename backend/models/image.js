@@ -31,11 +31,19 @@ const imageSchema = new mongoose.Schema(
       default: "general",
     },
     clientId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Client',
-    required: true,
-    index: true
-  }
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Client',
+      required: true,
+      index: true
+    },
+    // NEW FIELDS FOR NIC DETECTION
+    labels: [{
+      type: String
+    }],
+    isNICDetected: {
+      type: Boolean,
+      default: false
+    }
   },
   { timestamps: true }
 );
@@ -43,5 +51,6 @@ const imageSchema = new mongoose.Schema(
 // Index for faster queries
 imageSchema.index({ moduleId: 1, moduleType: 1 });
 imageSchema.index({ public_id: 1 });
+imageSchema.index({ isNICDetected: 1 });
 
 module.exports = mongoose.model("Image", imageSchema);
