@@ -1,320 +1,381 @@
 const express = require('express');
 const router = express.Router();
-const Staff = require('../models/staff');
 const authMiddleware = require('../middleware/authMiddleware');
-const { addTenantId } = require('../middleware/authMiddleware');
+const staffController = require('../controllers/staffController');
 
 // Apply auth middleware to all routes
 router.use(authMiddleware);
 
 /**
- * GET /staff/roles - Get all available staff roles
+ * @swagger
+ * tags:
+ *   name: Staff
+ *   description: Staff management endpoints
  */
-router.get('/roles', async (req, res) => {
-  try {
-    const roles = ['Admin', 'Owner', 'Manager', 'Technician', 'Reception', 'Cleaning'];
-    res.json(roles);
-  } catch (err) {
-    console.error('❌ Error fetching roles:', err.message);
-    res.status(500).json({ message: err.message });
-  }
-});
 
 /**
- * GET /staff/stats/summary - Get staff statistics
- * Returns count by role and status
- * Note: This must be defined BEFORE /:id route
+ * @swagger
+ * /api/staff/roles:
+ *   get:
+ *     summary: Get all available staff roles
+ *     description: Retrieve a list of all available roles that can be assigned to staff members
+ *     tags: [Staff]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of roles retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 roles:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                   example: [manager, receptionist, housekeeper, chef, security, maintenance]
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       500:
+ *         description: Internal server error
  */
-router.get('/stats/summary', async (req, res) => {
-  try {
-    // ✅ Add tenant filter to aggregation
-    const stats = await Staff.aggregate([
-      {
-        $match: req.tenantFilter || {}
-      },
-      {
-        $group: {
-          _id: null,
-          total: { $sum: 1 },
-          byRole: {
-            $push: { role: '$role' }
-          },
-          byStatus: {
-            $push: { status: '$status' }
-          }
-        }
-      }
-    ]);
-
-    const roleCount = {};
-    const statusCount = {};
-
-    if (stats.length > 0) {
-      // Count by role
-      stats[0].byRole.forEach(item => {
-        roleCount[item.role] = (roleCount[item.role] || 0) + 1;
-      });
-
-      // Count by status
-      stats[0].byStatus.forEach(item => {
-        statusCount[item.status] = (statusCount[item.status] || 0) + 1;
-      });
-    }
-
-    res.json({
-      total: stats.length > 0 ? stats[0].total : 0,
-      byRole: roleCount,
-      byStatus: statusCount
-    });
-  } catch (err) {
-    console.error('❌ Error fetching staff stats:', err.message);
-    res.status(500).json({ message: err.message });
-  }
-});
+router.get('/roles', staffController.getRoles);
 
 /**
- * GET /staff - Fetch all staff with optional filtering
- * Query params:
- * - role: filter by role
- * - status: filter by status (active, inactive, on_leave)
- * - search: search term for name, email, or phone
+ * @swagger
+ * /api/staff/stats/summary:
+ *   get:
+ *     summary: Get staff statistics summary
+ *     description: Retrieve statistics including count by role and status
+ *     tags: [Staff]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Staff statistics retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 stats:
+ *                   type: object
+ *                   properties:
+ *                     total:
+ *                       type: integer
+ *                       example: 25
+ *                     byRole:
+ *                       type: object
+ *                       additionalProperties:
+ *                         type: integer
+ *                       example:
+ *                         manager: 2
+ *                         receptionist: 5
+ *                         housekeeper: 10
+ *                     byStatus:
+ *                       type: object
+ *                       properties:
+ *                         active:
+ *                           type: integer
+ *                           example: 20
+ *                         inactive:
+ *                           type: integer
+ *                           example: 3
+ *                         on_leave:
+ *                           type: integer
+ *                           example: 2
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       500:
+ *         description: Internal server error
  */
-router.get('/', async (req, res) => {
-  try {
-    const { role, status, search } = req.query;
-    
-    // ✅ Start with tenant filter
-    let query = { ...req.tenantFilter };
-    
-    // Role filtering
-    if (role && ['Admin', 'Owner', 'Manager', 'Technician', 'Reception', 'Cleaning'].includes(role)) {
-      query.role = role;
-    }
-    
-    // Status filtering
-    if (status && ['active', 'inactive', 'on_leave'].includes(status)) {
-      query.status = status;
-    }
-    
-    // Search filtering
-    if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } }
-      ];
-    }
-    
-    console.log('📊 Fetching staff with query:', JSON.stringify(query));
-    
-    const staff = await Staff.find(query).sort({ createdAt: -1 });
-    
-    console.log(`✅ Found ${staff.length} staff members`);
-    res.json(staff);
-  } catch (err) {
-    console.error('❌ Error fetching staff:', err.message);
-    res.status(500).json({ message: err.message });
-  }
-});
+router.get('/stats/summary', staffController.getStatsSummary);
 
 /**
- * GET /staff/:id - Get single staff member by ID
+ * @swagger
+ * /api/staff:
+ *   get:
+ *     summary: Get all staff members
+ *     description: Retrieve all staff members with optional filtering by role, status, or search term
+ *     tags: [Staff]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: role
+ *         schema:
+ *           type: string
+ *           enum: [manager, receptionist, housekeeper, chef, security, maintenance]
+ *         description: Filter by staff role
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [active, inactive, on_leave]
+ *         description: Filter by staff status
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Search term for name, email, or phone
+ *     responses:
+ *       200:
+ *         description: List of staff members retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   _id:
+ *                     type: string
+ *                   name:
+ *                     type: string
+ *                   email:
+ *                     type: string
+ *                   phone:
+ *                     type: string
+ *                   role:
+ *                     type: string
+ *                   status:
+ *                     type: string
+ *                   joiningDate:
+ *                     type: string
+ *                     format: date
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       500:
+ *         description: Internal server error
  */
-router.get('/:id', async (req, res) => {
-  try {
-    // ✅ Add tenant filter
-    const staff = await Staff.findOne({ 
-      _id: req.params.id, 
-      ...req.tenantFilter 
-    });
-    
-    if (!staff) {
-      console.error('Staff member not found for ID:', req.params.id);
-      return res.status(404).json({ message: 'Staff member not found' });
-    }
-    
-    console.log('✅ Staff member found:', staff.name);
-    res.json(staff);
-  } catch (err) {
-    console.error('❌ Error fetching staff member:', err.message);
-    res.status(500).json({ message: err.message });
-  }
-});
+router.get('/', staffController.getAllStaff);
 
 /**
- * POST /staff - Create a new staff member
+ * @swagger
+ * /api/staff/{id}:
+ *   get:
+ *     summary: Get staff member by ID
+ *     description: Retrieve a single staff member by their ID
+ *     tags: [Staff]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Staff member ID
+ *     responses:
+ *       200:
+ *         description: Staff member retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 _id:
+ *                   type: string
+ *                 name:
+ *                   type: string
+ *                 email:
+ *                   type: string
+ *                 phone:
+ *                   type: string
+ *                 role:
+ *                   type: string
+ *                 status:
+ *                   type: string
+ *                 joiningDate:
+ *                   type: string
+ *                   format: date
+ *                 salary:
+ *                   type: number
+ *                 address:
+ *                   type: string
+ *                 emergencyContact:
+ *                   type: object
+ *                   properties:
+ *                     name:
+ *                       type: string
+ *                     phone:
+ *                       type: string
+ *                     relationship:
+ *                       type: string
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       404:
+ *         description: Staff member not found
+ *       500:
+ *         description: Internal server error
  */
-router.post('/', async (req, res) => {
-  try {
-    // Validate required fields
-    const requiredFields = ['name', 'role'];
-    for (const field of requiredFields) {
-      if (!req.body[field]) {
-        return res.status(400).json({ message: `Missing required field: ${field}` });
-      }
-    }
-
-    // Validate role
-    const validRoles = ['Admin', 'Owner', 'Manager', 'Technician', 'Reception', 'Cleaning'];
-    if (!validRoles.includes(req.body.role)) {
-      return res.status(400).json({ 
-        message: `Invalid role. Must be one of: ${validRoles.join(', ')}` 
-      });
-    }
-
-    // Validate email format if provided
-    if (req.body.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(req.body.email)) {
-      return res.status(400).json({ message: 'Invalid email format' });
-    }
-
-    // ✅ Check if email already exists within same tenant (if provided)
-    if (req.body.email) {
-      const existingStaff = await Staff.findOne({ 
-        email: req.body.email,
-        ...req.tenantFilter 
-      });
-      if (existingStaff) {
-        return res.status(400).json({ message: 'Email already exists' });
-      }
-    }
-
-    // ✅ Create staff member with clientId
-    const staffData = addTenantId(req, {
-      name: req.body.name,
-      profile_picture: req.body.profile_picture || null,
-      birthday: req.body.birthday || null,
-      email: req.body.email || null,
-      phone: req.body.phone || null,
-      joined_date: req.body.joined_date || null,
-      current_salary: req.body.current_salary || null,
-      role: req.body.role,
-      status: req.body.status || 'active',
-      emergency_contact: req.body.emergency_contact || {},
-      notes: req.body.notes || ''
-    });
-
-    const staff = new Staff(staffData);
-
-    await staff.save();
-    console.log('✅ Staff member created:', staff.name);
-
-    res.status(201).json(staff);
-  } catch (err) {
-    console.error('❌ Staff creation error:', err.message);
-    
-    // Handle duplicate email error
-    if (err.code === 11000 && err.keyPattern && err.keyPattern.email) {
-      return res.status(400).json({ message: 'Email already exists' });
-    }
-    
-    res.status(400).json({ message: err.message });
-  }
-});
+router.get('/:id', staffController.getStaffById);
 
 /**
- * PATCH /staff/:id - Update staff member
+ * @swagger
+ * /api/staff:
+ *   post:
+ *     summary: Create a new staff member
+ *     description: Add a new staff member to the system
+ *     tags: [Staff]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - email
+ *               - phone
+ *               - role
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 description: Full name of the staff member
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 description: Email address
+ *               phone:
+ *                 type: string
+ *                 description: Phone number
+ *               role:
+ *                 type: string
+ *                 enum: [manager, receptionist, housekeeper, chef, security, maintenance]
+ *                 description: Staff role
+ *               status:
+ *                 type: string
+ *                 enum: [active, inactive, on_leave]
+ *                 default: active
+ *                 description: Employment status
+ *               joiningDate:
+ *                 type: string
+ *                 format: date
+ *                 description: Date of joining
+ *               salary:
+ *                 type: number
+ *                 description: Monthly salary
+ *               address:
+ *                 type: string
+ *                 description: Home address
+ *               emergencyContact:
+ *                 type: object
+ *                 properties:
+ *                   name:
+ *                     type: string
+ *                   phone:
+ *                     type: string
+ *                   relationship:
+ *                     type: string
+ *     responses:
+ *       201:
+ *         description: Staff member created successfully
+ *       400:
+ *         description: Bad request - Invalid input or email already exists
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       500:
+ *         description: Internal server error
  */
-router.patch('/:id', async (req, res) => {
-  try {
-    // ✅ Add tenant filter
-    const staff = await Staff.findOne({ 
-      _id: req.params.id, 
-      ...req.tenantFilter 
-    });
-    
-    if (!staff) {
-      console.error('Staff member not found for ID:', req.params.id);
-      return res.status(404).json({ message: 'Staff member not found' });
-    }
-
-    // Validate role if provided
-    if (req.body.role) {
-      const validRoles = ['Admin', 'Owner', 'Manager', 'Technician', 'Reception', 'Cleaning'];
-      if (!validRoles.includes(req.body.role)) {
-        return res.status(400).json({ 
-          message: `Invalid role. Must be one of: ${validRoles.join(', ')}` 
-        });
-      }
-    }
-
-    // Validate email format if provided
-    if (req.body.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(req.body.email)) {
-      return res.status(400).json({ message: 'Invalid email format' });
-    }
-
-    // ✅ Check if email already exists within same tenant (if changing email)
-    if (req.body.email && req.body.email !== staff.email) {
-      const existingStaff = await Staff.findOne({ 
-        email: req.body.email,
-        _id: { $ne: req.params.id },
-        ...req.tenantFilter
-      });
-      if (existingStaff) {
-        return res.status(400).json({ message: 'Email already exists' });
-      }
-    }
-
-    // Validate status if provided
-    if (req.body.status) {
-      const validStatuses = ['active', 'inactive', 'on_leave'];
-      if (!validStatuses.includes(req.body.status)) {
-        return res.status(400).json({ 
-          message: `Invalid status. Must be one of: ${validStatuses.join(', ')}` 
-        });
-      }
-    }
-
-    // Update fields (prevent clientId modification)
-    const allowedUpdates = [
-      'name', 'profile_picture', 'birthday', 'email', 'phone', 
-      'joined_date', 'current_salary', 'role', 'status', 
-      'emergency_contact', 'notes'
-    ];
-
-    allowedUpdates.forEach(field => {
-      if (req.body[field] !== undefined) {
-        staff[field] = req.body[field];
-      }
-    });
-
-    await staff.save();
-    console.log('✅ Staff member updated:', staff.name);
-
-    res.json(staff);
-  } catch (err) {
-    console.error('❌ Staff update error:', err.message);
-    
-    // Handle duplicate email error
-    if (err.code === 11000 && err.keyPattern && err.keyPattern.email) {
-      return res.status(400).json({ message: 'Email already exists' });
-    }
-    
-    res.status(400).json({ message: err.message });
-  }
-});
+router.post('/', staffController.createStaff);
 
 /**
- * DELETE /staff/:id - Delete a staff member
+ * @swagger
+ * /api/staff/{id}:
+ *   patch:
+ *     summary: Update a staff member
+ *     description: Partially update an existing staff member's information
+ *     tags: [Staff]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Staff member ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               phone:
+ *                 type: string
+ *               role:
+ *                 type: string
+ *                 enum: [manager, receptionist, housekeeper, chef, security, maintenance]
+ *               status:
+ *                 type: string
+ *                 enum: [active, inactive, on_leave]
+ *               salary:
+ *                 type: number
+ *               address:
+ *                 type: string
+ *               emergencyContact:
+ *                 type: object
+ *                 properties:
+ *                   name:
+ *                     type: string
+ *                   phone:
+ *                     type: string
+ *                   relationship:
+ *                     type: string
+ *     responses:
+ *       200:
+ *         description: Staff member updated successfully
+ *       400:
+ *         description: Bad request - Invalid input
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       404:
+ *         description: Staff member not found
+ *       500:
+ *         description: Internal server error
  */
-router.delete('/:id', async (req, res) => {
-  try {
-    // ✅ Add tenant filter
-    const staff = await Staff.findOneAndDelete({ 
-      _id: req.params.id, 
-      ...req.tenantFilter 
-    });
-    
-    if (!staff) {
-      console.error('Staff member not found for ID:', req.params.id);
-      return res.status(404).json({ message: 'Staff member not found' });
-    }
-    
-    console.log('✅ Staff member deleted:', staff.name);
-    res.json({ message: 'Staff member deleted successfully' });
-  } catch (err) {
-    console.error('❌ Staff deletion error:', err.message);
-    res.status(500).json({ message: err.message });
-  }
-});
+router.patch('/:id', staffController.updateStaff);
+
+/**
+ * @swagger
+ * /api/staff/{id}:
+ *   delete:
+ *     summary: Delete a staff member
+ *     description: Remove a staff member from the system
+ *     tags: [Staff]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Staff member ID
+ *     responses:
+ *       200:
+ *         description: Staff member deleted successfully
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       404:
+ *         description: Staff member not found
+ *       500:
+ *         description: Internal server error
+ */
+router.delete('/:id', staffController.deleteStaff);
 
 module.exports = router;

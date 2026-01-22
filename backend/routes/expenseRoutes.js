@@ -1,163 +1,248 @@
+// backend/routes/expenseRoutes.js
 const express = require("express");
 const router = express.Router();
-const Expense = require("../models/expense");
-const authMiddleware = require("../middleware/authMiddleware"); // ⭐ Add this line
+const authMiddleware = require("../middleware/authMiddleware");
+const expenseController = require("../controllers/expenseController");
 
-// Safe date parse
-const safeDate = (d) => {
-  const dt = new Date(d);
-  return isNaN(dt) ? new Date() : dt;
-};
-
-// ⭐⭐⭐ Apply auth middleware to all routes ⭐⭐⭐
+// Apply auth middleware to all routes
 router.use(authMiddleware);
 
-// CREATE EXPENSE
-router.post("/", async (req, res) => {
-  try {
-    console.log("📥 Received expense data:", JSON.stringify(req.body, null, 2));
-    console.log("👤 User ID:", req.user.id); // ⭐ Log user ID
-    
-    const { category, title, amount, date, description, images } = req.body;
+/**
+ * @swagger
+ * tags:
+ *   name: Expenses
+ *   description: Expense management endpoints
+ */
 
-    if (!category || !title) {
-      console.error("❌ Missing required fields");
-      return res.status(400).json({ error: "Category & title are required" });
-    }
+/**
+ * @swagger
+ * /api/expenses:
+ *   post:
+ *     summary: Create a new expense
+ *     description: Create a new expense record in the system
+ *     tags: [Expenses]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - title
+ *               - amount
+ *               - category
+ *             properties:
+ *               title:
+ *                 type: string
+ *                 description: Expense title
+ *               amount:
+ *                 type: number
+ *                 description: Expense amount
+ *               category:
+ *                 type: string
+ *                 description: Expense category
+ *               description:
+ *                 type: string
+ *                 description: Additional description
+ *               date:
+ *                 type: string
+ *                 format: date
+ *                 description: Expense date
+ *               paymentMethod:
+ *                 type: string
+ *                 description: Payment method used
+ *     responses:
+ *       201:
+ *         description: Expense created successfully
+ *       400:
+ *         description: Bad request - Invalid input
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       500:
+ *         description: Internal server error
+ */
+router.post("/", expenseController.createExpense);
 
-    let imageArray = [];
-    if (images && Array.isArray(images)) {
-      imageArray = images.map(img => ({
-        filename: img.filename || 'image.jpg',
-        url: img.url,
-        cloudinary_id: img.cloudinary_id,
-        fileSize: img.fileSize || 0,
-        mimeType: img.mimeType || 'image/jpeg',
-        uploadedAt: new Date()
-      }));
-    }
+/**
+ * @swagger
+ * /api/expenses:
+ *   get:
+ *     summary: Get all expenses
+ *     description: Retrieve all expenses excluding soft-deleted ones
+ *     tags: [Expenses]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: category
+ *         schema:
+ *           type: string
+ *         description: Filter by category
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Filter by start date
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Filter by end date
+ *     responses:
+ *       200:
+ *         description: List of expenses retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   _id:
+ *                     type: string
+ *                   title:
+ *                     type: string
+ *                   amount:
+ *                     type: number
+ *                   category:
+ *                     type: string
+ *                   date:
+ *                     type: string
+ *                     format: date
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       500:
+ *         description: Internal server error
+ */
+router.get("/", expenseController.getAllExpenses);
 
-    const expense = new Expense({
-      category,
-      title,
-      amount: parseFloat(amount) || 0,
-      date: safeDate(date),
-      description: description || "",
-      images: imageArray,
-      clientId: req.user.id, // ⭐⭐⭐ Add this line
-    });
+/**
+ * @swagger
+ * /api/expenses/{id}:
+ *   get:
+ *     summary: Get expense by ID
+ *     description: Retrieve a single expense by its ID
+ *     tags: [Expenses]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Expense ID
+ *     responses:
+ *       200:
+ *         description: Expense retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 _id:
+ *                   type: string
+ *                 title:
+ *                   type: string
+ *                 amount:
+ *                   type: number
+ *                 category:
+ *                   type: string
+ *                 description:
+ *                   type: string
+ *                 date:
+ *                   type: string
+ *                   format: date
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       404:
+ *         description: Expense not found
+ *       500:
+ *         description: Internal server error
+ */
+router.get("/:id", expenseController.getExpenseById);
 
-    const saved = await expense.save();
-    console.log("✅ Expense created:", saved._id);
-    
-    return res.status(201).json(saved);
-  } catch (err) {
-    console.error("❌ Create Expense Error:", err.message);
-    return res.status(500).json({ error: err.message });
-  }
-});
+/**
+ * @swagger
+ * /api/expenses/{id}:
+ *   put:
+ *     summary: Update an expense
+ *     description: Update an existing expense by its ID
+ *     tags: [Expenses]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Expense ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title:
+ *                 type: string
+ *               amount:
+ *                 type: number
+ *               category:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               date:
+ *                 type: string
+ *                 format: date
+ *               paymentMethod:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Expense updated successfully
+ *       400:
+ *         description: Bad request - Invalid input
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       404:
+ *         description: Expense not found
+ *       500:
+ *         description: Internal server error
+ */
+router.put("/:id", expenseController.updateExpense);
 
-// GET ALL EXPENSES
-router.get("/", async (req, res) => {
-  try {
-    console.log("📋 Fetching expenses for user:", req.user.id); // ⭐ Log user ID
-    const list = await Expense.find({ 
-      deleted: false,
-      clientId: req.user.id // ⭐⭐⭐ Filter by user
-    }).sort({ createdAt: -1 });
-    console.log(`✅ Found ${list.length} expenses`);
-    res.json(list);
-  } catch (err) {
-    console.error("❌ Fetch Error:", err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// GET SINGLE EXPENSE
-router.get("/:id", async (req, res) => {
-  try {
-    console.log("🔍 Fetching expense:", req.params.id);
-    const exp = await Expense.findOne({ // ⭐ Changed from findById
-      _id: req.params.id,
-      clientId: req.user.id // ⭐⭐⭐ Filter by user
-    });
-    if (!exp || exp.deleted) {
-      console.error("❌ Expense not found");
-      return res.status(404).json({ error: "Not found" });
-    }
-    console.log("✅ Expense found");
-    res.json(exp);
-  } catch (err) {
-    console.error("❌ Fetch Error:", err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// UPDATE EXPENSE
-router.put("/:id", async (req, res) => {
-  try {
-    console.log("📝 Updating expense:", req.params.id);
-    const exp = await Expense.findOne({ // ⭐ Changed from findById
-      _id: req.params.id,
-      clientId: req.user.id // ⭐⭐⭐ Filter by user
-    });
-    if (!exp || exp.deleted) {
-      console.error("❌ Expense not found");
-      return res.status(404).json({ error: "Not found" });
-    }
-
-    const { category, title, amount, date, description, images } = req.body;
-
-    if (category) exp.category = category;
-    if (title) exp.title = title;
-    if (amount !== undefined) exp.amount = parseFloat(amount);
-    if (date) exp.date = safeDate(date);
-    if (description !== undefined) exp.description = description;
-
-    if (images && Array.isArray(images)) {
-      const newImages = images.map(img => ({
-        filename: img.filename || 'image.jpg',
-        url: img.url,
-        cloudinary_id: img.cloudinary_id || '',
-        fileSize: img.fileSize || 0,
-        mimeType: img.mimeType || 'image/jpeg',
-        uploadedAt: new Date()
-      }));
-      exp.images = newImages;
-    }
-
-    const updated = await exp.save();
-    console.log("✅ Expense updated");
-    res.json(updated);
-  } catch (err) {
-    console.error("❌ Update Error:", err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// DELETE EXPENSE
-router.delete("/:id", async (req, res) => {
-  try {
-    console.log("🗑️ Deleting expense:", req.params.id);
-    const exp = await Expense.findOne({ // ⭐ Changed from findById
-      _id: req.params.id,
-      clientId: req.user.id // ⭐⭐⭐ Filter by user
-    });
-    if (!exp || exp.deleted) {
-      console.error("❌ Expense not found");
-      return res.status(404).json({ error: "Not found" });
-    }
-
-    exp.deleted = true;
-    exp.deletedAt = new Date();
-    await exp.save();
-
-    console.log("✅ Expense deleted");
-    res.json({ message: "Expense deleted successfully" });
-  } catch (err) {
-    console.error("❌ Delete Error:", err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
+/**
+ * @swagger
+ * /api/expenses/{id}:
+ *   delete:
+ *     summary: Delete an expense
+ *     description: Soft delete an expense by its ID
+ *     tags: [Expenses]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Expense ID
+ *     responses:
+ *       200:
+ *         description: Expense deleted successfully
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       404:
+ *         description: Expense not found
+ *       500:
+ *         description: Internal server error
+ */
+router.delete("/:id", expenseController.deleteExpense);
 
 module.exports = router;
+

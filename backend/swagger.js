@@ -5,15 +5,34 @@ const swaggerUi = require("swagger-ui-express");
 const swaggerDefinition = {
   openapi: "3.0.0",
   info: {
-    title: "My Node API",
+    title: "Zonova Mist API",
     version: "1.0.0",
-    description: "API documentation with Swagger",
+    description: "API documentation for the ZonovaMist Hotel Management System",
   },
   servers: [
-    {
-      url: "http://localhost:3000", // <-- your base URL
+  {
+    url: "http://localhost:3000",
+    description: "Local Development Server"
+  },
+  {
+    url: "https://zonova-mist-api-dev-487454014534.us-central1.run.app", 
+    description: "Cloud Dev Server"
+  },
+],
+  components: { // For token
+      securitySchemes: {
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+        },
+      },
     },
-  ],
+  security: [
+      {
+        bearerAuth: [],
+      },
+    ],
 };
 
 // Options for swagger-jsdoc

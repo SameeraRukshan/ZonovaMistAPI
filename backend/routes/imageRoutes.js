@@ -20,7 +20,7 @@ const { extractNICData } = require("../helpers/nicExtractionHelper");
 // Apply auth middleware to all routes
 router.use(authMiddleware);
 
-// ✅ Multer config (memory storage)
+// Multer config (memory storage)
 const upload = multer({
   storage: multer.memoryStorage(),
   fileFilter: (req, file, cb) => {

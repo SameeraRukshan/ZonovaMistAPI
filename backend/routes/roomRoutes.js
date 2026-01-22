@@ -1,206 +1,343 @@
 const express = require('express');
 const router = express.Router();
-const Room = require('../models/room');
-const Booking = require('../models/booking');
 const authMiddleware = require('../middleware/authMiddleware');
-const { addTenantId } = require('../middleware/authMiddleware');
+const roomController = require('../controllers/roomController');
 
 // Apply auth middleware to all routes
 router.use(authMiddleware);
 
-// GET all rooms
-router.get('/', async (req, res) => {
-  try {
-    const rooms = await Room.find(req.tenantFilter).sort({ roomNumber: 1 });
-    res.json(rooms);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
+/**
+ * @swagger
+ * tags:
+ *   name: Rooms
+ *   description: Room management endpoints
+ */
 
 /**
- * GET /rooms/available - Get available rooms for a date range
- * Query params: checkinDate, checkoutDate, excludeBookingId 
+ * @swagger
+ * /api/rooms:
+ *   get:
+ *     summary: Get all rooms
+ *     description: Retrieve all rooms excluding soft-deleted ones
+ *     tags: [Rooms]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: hotelId
+ *         schema:
+ *           type: string
+ *         description: Filter rooms by hotel ID
+ *       - in: query
+ *         name: type
+ *         schema:
+ *           type: string
+ *           enum: [single, double, suite, deluxe, family]
+ *         description: Filter by room type
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [available, occupied, maintenance, reserved]
+ *         description: Filter by room status
+ *     responses:
+ *       200:
+ *         description: List of rooms retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   _id:
+ *                     type: string
+ *                   roomNumber:
+ *                     type: string
+ *                   type:
+ *                     type: string
+ *                   price:
+ *                     type: number
+ *                   status:
+ *                     type: string
+ *                   hotelId:
+ *                     type: string
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       500:
+ *         description: Internal server error
  */
-router.get('/available', async (req, res) => {
-  try {
-    const { checkinDate, checkoutDate, excludeBookingId } = req.query;
+router.get('/', roomController.getAllRooms);
 
-    if (!checkinDate || !checkoutDate) {
-      return res.status(400).json({ 
-        message: 'checkinDate and checkoutDate are required' 
-      });
-    }
+/**
+ * @swagger
+ * /api/rooms/available:
+ *   get:
+ *     summary: Get available rooms for a date range
+ *     description: Retrieve all rooms that are available for booking within the specified date range
+ *     tags: [Rooms]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: checkIn
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Check-in date (YYYY-MM-DD)
+ *       - in: query
+ *         name: checkOut
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Check-out date (YYYY-MM-DD)
+ *       - in: query
+ *         name: hotelId
+ *         schema:
+ *           type: string
+ *         description: Filter by hotel ID
+ *       - in: query
+ *         name: type
+ *         schema:
+ *           type: string
+ *           enum: [single, double, suite, deluxe, family]
+ *         description: Filter by room type
+ *       - in: query
+ *         name: guests
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *         description: Minimum guest capacity required
+ *     responses:
+ *       200:
+ *         description: List of available rooms retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   _id:
+ *                     type: string
+ *                   roomNumber:
+ *                     type: string
+ *                   type:
+ *                     type: string
+ *                   price:
+ *                     type: number
+ *                   capacity:
+ *                     type: integer
+ *                   amenities:
+ *                     type: array
+ *                     items:
+ *                       type: string
+ *       400:
+ *         description: Bad request - checkIn and checkOut dates are required
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       500:
+ *         description: Internal server error
+ */
+router.get('/available', roomController.getAvailableRooms);
 
-    const checkin = new Date(checkinDate);
-    const checkout = new Date(checkoutDate);
+/**
+ * @swagger
+ * /api/rooms/{id}:
+ *   get:
+ *     summary: Get room by ID
+ *     description: Retrieve a single room by its ID
+ *     tags: [Rooms]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Room ID
+ *     responses:
+ *       200:
+ *         description: Room retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 _id:
+ *                   type: string
+ *                 roomNumber:
+ *                   type: string
+ *                 type:
+ *                   type: string
+ *                 price:
+ *                   type: number
+ *                 status:
+ *                   type: string
+ *                 capacity:
+ *                   type: integer
+ *                 amenities:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                 description:
+ *                   type: string
+ *                 hotelId:
+ *                   type: string
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       404:
+ *         description: Room not found
+ *       500:
+ *         description: Internal server error
+ */
+router.get('/:id', roomController.getRoomById);
 
-    if (isNaN(checkin.getTime()) || isNaN(checkout.getTime())) {
-      return res.status(400).json({ 
-        message: 'Invalid date format' 
-      });
-    }
+/**
+ * @swagger
+ * /api/rooms:
+ *   post:
+ *     summary: Create a new room
+ *     description: Create a new room in the system
+ *     tags: [Rooms]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - roomNumber
+ *               - type
+ *               - price
+ *             properties:
+ *               roomNumber:
+ *                 type: string
+ *                 description: Unique room number/identifier
+ *               type:
+ *                 type: string
+ *                 enum: [single, double, suite, deluxe, family]
+ *                 description: Room type
+ *               price:
+ *                 type: number
+ *                 description: Price per night
+ *               capacity:
+ *                 type: integer
+ *                 description: Maximum number of guests
+ *               status:
+ *                 type: string
+ *                 enum: [available, occupied, maintenance, reserved]
+ *                 default: available
+ *                 description: Current room status
+ *               amenities:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: List of room amenities
+ *               description:
+ *                 type: string
+ *                 description: Room description
+ *               hotelId:
+ *                 type: string
+ *                 description: Associated hotel ID
+ *     responses:
+ *       201:
+ *         description: Room created successfully
+ *       400:
+ *         description: Bad request - Invalid input or room number already exists
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       500:
+ *         description: Internal server error
+ */
+router.post('/', roomController.createRoom);
 
-    if (checkin >= checkout) {
-      return res.status(400).json({ 
-        message: 'Check-out date must be after check-in date' 
-      });
-    }
+/**
+ * @swagger
+ * /api/rooms/{id}:
+ *   patch:
+ *     summary: Update a room
+ *     description: Partially update an existing room
+ *     tags: [Rooms]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Room ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               roomNumber:
+ *                 type: string
+ *               type:
+ *                 type: string
+ *                 enum: [single, double, suite, deluxe, family]
+ *               price:
+ *                 type: number
+ *               capacity:
+ *                 type: integer
+ *               status:
+ *                 type: string
+ *                 enum: [available, occupied, maintenance, reserved]
+ *               amenities:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               description:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Room updated successfully
+ *       400:
+ *         description: Bad request - Invalid input
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       404:
+ *         description: Room not found
+ *       500:
+ *         description: Internal server error
+ */
+router.patch('/:id', roomController.updateRoom);
 
-    // Get all rooms for this client
-    const allRooms = await Room.find(req.tenantFilter).sort({ roomNumber: 1 });
-
-    // Build query for overlapping bookings (only for this client)
-    const bookingQuery = {
-      ...req.tenantFilter,
-      deleted: { $ne: true },
-      status: { $ne: 'cancelled' },
-      checkin_date: { $lt: checkout },
-      checkout_date: { $gt: checkin }
-    };
-
-    // Exclude specific booking if editing
-    if (excludeBookingId) {
-      bookingQuery._id = { $ne: excludeBookingId };
-    }
-
-    // Find all overlapping bookings for this client
-    const overlappingBookings = await Booking.find(bookingQuery);
-
-    // Extract booked room numbers
-    const bookedRoomNumbers = new Set();
-    overlappingBookings.forEach(booking => {
-      const rooms = booking.booked_room_no.split(',').map(r => r.trim());
-      rooms.forEach(room => bookedRoomNumbers.add(room));
-    });
-
-    // Categorize rooms
-    const availableRooms = [];
-    const unavailableRooms = [];
-
-    allRooms.forEach(room => {
-      const roomData = {
-        _id: room._id,
-        roomNumber: room.roomNumber,
-        floor: room.floor,
-        type: room.type,
-        bedCount: room.bedCount,
-        maxOccupancy: room.maxOccupancy,
-        pricePerNight: room.pricePerNight,
-        status: room.status,
-        amenities: room.amenities
-      };
-
-      // Check if room is available (not booked and not in maintenance)
-      if (bookedRoomNumbers.has(room.roomNumber) || room.status === 'maintenance') {
-        unavailableRooms.push({
-          ...roomData,
-          unavailableReason: bookedRoomNumbers.has(room.roomNumber) ? 'booked' : 'maintenance'
-        });
-      } else {
-        availableRooms.push(roomData);
-      }
-    });
-
-    res.json({
-      checkinDate: checkin,
-      checkoutDate: checkout,
-      available: availableRooms,
-      unavailable: unavailableRooms,
-      summary: {
-        total: allRooms.length,
-        available: availableRooms.length,
-        unavailable: unavailableRooms.length
-      }
-    });
-
-  } catch (err) {
-    console.error('❌ Error fetching available rooms:', err);
-    res.status(500).json({ 
-      message: 'Failed to fetch available rooms',
-      error: err.message 
-    });
-  }
-});
-
-// GET room by ID
-router.get('/:id', async (req, res) => {
-  try {
-    const room = await Room.findOne({ 
-      _id: req.params.id, 
-      ...req.tenantFilter 
-    });
-    if (!room) {
-      return res.status(404).json({ message: 'Room not found' });
-    }
-    res.json(room);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// PATCH update room
-router.patch('/:id', async (req, res) => {
-  try {
-    // Prevent clientId modification
-    delete req.body.clientId;
-    
-    const updateData = { ...req.body, updatedAt: new Date() };
-    const room = await Room.findOneAndUpdate(
-      { _id: req.params.id, ...req.tenantFilter },
-      updateData,
-      { new: true }
-    );
-    if (!room) {
-      return res.status(404).json({ message: 'Room not found' });
-    }
-    res.json(room);
-  } catch (err) {
-    res.status(500).json({ message: 'Failed to update room', error: err.message });
-  }
-});
-
-// POST create room
-router.post('/', async (req, res) => {
-  try {
-    const { roomNumber, floor, type, bedCount, maxOccupancy, pricePerNight, status, amenities } = req.body;
-    
-    // Add clientId to room data
-    const roomData = addTenantId(req, {
-      roomNumber,
-      floor,
-      type,
-      bedCount,
-      maxOccupancy,
-      pricePerNight,
-      status,
-      amenities,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    });
-    
-    const room = new Room(roomData);
-    const newRoom = await room.save();
-    res.status(201).json(newRoom);
-  } catch (err) {
-    res.status(400).json({ message: err.message });
-  }
-});
-
-// DELETE room
-router.delete('/:id', async (req, res) => {
-  try {
-    const room = await Room.findOneAndDelete({ 
-      _id: req.params.id, 
-      ...req.tenantFilter 
-    });
-    if (!room) {
-      return res.status(404).json({ message: 'Room not found' });
-    }
-    res.json({ message: 'Room deleted successfully' });
-  } catch (err) {
-    res.status(500).json({ message: 'Failed to delete room', error: err.message });
-  }
-});
+/**
+ * @swagger
+ * /api/rooms/{id}:
+ *   delete:
+ *     summary: Delete a room
+ *     description: Soft delete a room by its ID
+ *     tags: [Rooms]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Room ID
+ *     responses:
+ *       200:
+ *         description: Room deleted successfully
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       404:
+ *         description: Room not found
+ *       500:
+ *         description: Internal server error
+ */
+router.delete('/:id', roomController.deleteRoom);
 
 module.exports = router;

@@ -1,9 +1,8 @@
-// routes/dashboardRoutes.js
-const express = require('express');
+// backend/routes/dashboardRoutes.js
+const express = require("express");
 const router = express.Router();
-const Expense = require("../models/expense");
-const Booking = require("../models/booking");
-const jwt = require("jsonwebtoken");
+const authMiddleware = require('../middleware/authMiddleware');
+const dashboardController = require('../controllers/dashboardController');
 
 // 🔥 Authentication Middleware
 const protect = async (req, res, next) => {
@@ -14,27 +13,20 @@ const protect = async (req, res, next) => {
       token = req.headers.authorization.split(" ")[1];
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       req.user = decoded;
-      req.tenantFilter = { clientId: decoded.clientId };
       next();
     } catch (error) {
       console.error("❌ Token verification failed:", error.message);
-      return res.status(401).json({ message: "Not authorized, token failed" });
+      return res.status(401).json({ error: "Not authorized, token failed" });
     }
   } else {
-    return res.status(401).json({ message: "Not authorized, no token" });
+    return res.status(401).json({ error: "Not authorized, no token" });
   }
 };
 
-// Apply protect middleware to all routes
-router.use(protect);
-
 // Helper function to parse Decimal128
 const parseDecimal = (val) => {
-  if (val === null || val === undefined) return 0;
-  if (typeof val === 'number') return val;
-  if (val.$numberDecimal) return parseFloat(val.$numberDecimal);
-  if (typeof val === 'string') return parseFloat(val) || 0;
-  return 0;
+  if (!val) return 0;
+  return parseFloat(val.toString());
 };
 
 // Helper function to get date range based on time period
@@ -63,16 +55,40 @@ const getDateRange = (timePeriod, customStartDate, customEndDate) => {
   return { startDate, endDate };
 };
 
-/**
- * GET /dashboard/stats - Get dashboard statistics
- */
-router.get('/stats', async (req, res) => {
+// --------------------------------------------------
+// GET DASHBOARD STATS
+// --------------------------------------------------
+router.get("/stats", protect, async (req, res) => {
   try {
-    console.log('📊 Fetching dashboard stats');
     const { timePeriod = 'month', startDate: customStart, endDate: customEnd } = req.query;
+    
     const { startDate, endDate } = getDateRange(timePeriod, customStart, customEnd);
+    
+    console.log("📊 Fetching stats from", startDate, "to", endDate);
 
-    // Get previous period for comparison
+    // Get expenses for current period
+    const expenses = await Expense.find({
+      deleted: false,
+      date: { $gte: startDate, $lte: endDate }
+    });
+
+    const totalExpenses = expenses.reduce((sum, exp) => sum + parseDecimal(exp.amount), 0);
+
+    // Get bookings for revenue calculation
+    const bookings = await Booking.find({
+      checkin_date: { $gte: startDate, $lte: endDate }
+    });
+
+    const totalRevenue = bookings.reduce((sum, booking) => 
+      sum + parseDecimal(booking.total_price), 0);
+    
+    const totalAdvances = bookings.reduce((sum, booking) => 
+      sum + parseDecimal(booking.advance_amount), 0);
+    
+    const totalCommission = bookings.reduce((sum, booking) => 
+      sum + parseDecimal(booking.commission_amount), 0);
+
+    // Calculate previous period for trend
     const periodLength = endDate - startDate;
     const prevStartDate = new Date(startDate.getTime() - periodLength);
     const prevEndDate = new Date(startDate.getTime() - 1);
@@ -152,200 +168,197 @@ router.get('/stats', async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+// Apply auth middleware to all routes
+router.use(authMiddleware);
 
 /**
- * GET /dashboard/revenue-comparison - Get revenue comparison data
+ * @swagger
+ * tags:
+ *   name: Dashboard
+ *   description: Dashboard statistics and analytics endpoints
  */
-router.get('/revenue-comparison', async (req, res) => {
-  try {
-    const { timePeriod = 'month', comparisons: comparisonsStr = 'now', startDate: customStart, endDate: customEnd } = req.query;
-    const comparisons = comparisonsStr.split(',');
-    
-    console.log('📊 Fetching revenue comparison:', { timePeriod, comparisons });
-
-    const { startDate, endDate } = getDateRange(timePeriod, customStart, customEnd);
-    const periodLength = endDate - startDate;
-
-    const result = {
-      prevData: [],
-      nowData: [],
-      nextData: []
-    };
-
-    // Helper to get data points for a period
-    const getDataPoints = async (periodStart, periodEnd) => {
-      const bookings = await Booking.find({
-        ...req.tenantFilter,
-        checkin_date: { $gte: periodStart, $lte: periodEnd },
-        deleted: { $ne: true }
-      }).sort({ checkin_date: 1 });
-
-      // Group by day
-      const dailyData = {};
-      bookings.forEach(booking => {
-        const dateKey = booking.checkin_date.toISOString().split('T')[0];
-        if (!dailyData[dateKey]) {
-          dailyData[dateKey] = 0;
-        }
-        dailyData[dateKey] += parseDecimal(booking.total_price);
-      });
-
-      return Object.entries(dailyData).map(([date, value]) => ({
-        label: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        value: value,
-        date: date
-      }));
-    };
-
-    // Process each comparison period
-    for (const comp of comparisons) {
-      let periodStart, periodEnd;
-      
-      switch (comp.trim()) {
-        case 'prev':
-          periodStart = new Date(startDate.getTime() - periodLength);
-          periodEnd = new Date(startDate.getTime() - 1);
-          result.prevData = await getDataPoints(periodStart, periodEnd);
-          break;
-        case 'now':
-          result.nowData = await getDataPoints(startDate, endDate);
-          break;
-        case 'next':
-          periodStart = new Date(endDate.getTime() + 1);
-          periodEnd = new Date(endDate.getTime() + periodLength);
-          result.nextData = await getDataPoints(periodStart, periodEnd);
-          break;
-      }
-    }
-
-    console.log('✅ Revenue comparison fetched successfully');
-    res.json(result);
-  } catch (err) {
-    console.error('❌ Error fetching revenue comparison:', err.message);
-    res.status(500).json({ message: err.message });
-  }
-});
 
 /**
- * GET /dashboard/expense-comparison - Get expense comparison data
+ * @swagger
+ * /api/dashboard/stats:
+ *   get:
+ *     summary: Get dashboard statistics
+ *     description: Retrieve overall dashboard statistics including bookings, revenue, and key metrics
+ *     tags: [Dashboard]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Dashboard statistics retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 totalBookings:
+ *                   type: number
+ *                 totalRevenue:
+ *                   type: number
+ *                 totalExpenses:
+ *                   type: number
+ *                 netProfit:
+ *                   type: number
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       500:
+ *         description: Internal server error
  */
-router.get('/expense-comparison', async (req, res) => {
-  try {
-    const { timePeriod = 'month', comparisons: comparisonsStr = 'now', startDate: customStart, endDate: customEnd } = req.query;
-    const comparisons = comparisonsStr.split(',');
-    
-    console.log('📊 Fetching expense comparison:', { timePeriod, comparisons });
-
-    const { startDate, endDate } = getDateRange(timePeriod, customStart, customEnd);
-    const periodLength = endDate - startDate;
-
-    const result = {
-      prevData: [],
-      nowData: [],
-      nextData: []
-    };
-
-    // Helper to get data points for a period
-    const getDataPoints = async (periodStart, periodEnd) => {
-      const expenses = await Expense.find({
-        ...req.tenantFilter,
-        date: { $gte: periodStart, $lte: periodEnd }
-      }).sort({ date: 1 });
-
-      // Group by day
-      const dailyData = {};
-      expenses.forEach(expense => {
-        const dateKey = expense.date.toISOString().split('T')[0];
-        if (!dailyData[dateKey]) {
-          dailyData[dateKey] = 0;
-        }
-        dailyData[dateKey] += parseDecimal(expense.amount);
-      });
-
-      return Object.entries(dailyData).map(([date, value]) => ({
-        label: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        value: value,
-        date: date
-      }));
-    };
-
-    // Process each comparison period
-    for (const comp of comparisons) {
-      let periodStart, periodEnd;
-      
-      switch (comp.trim()) {
-        case 'prev':
-          periodStart = new Date(startDate.getTime() - periodLength);
-          periodEnd = new Date(startDate.getTime() - 1);
-          result.prevData = await getDataPoints(periodStart, periodEnd);
-          break;
-        case 'now':
-          result.nowData = await getDataPoints(startDate, endDate);
-          break;
-        case 'next':
-          periodStart = new Date(endDate.getTime() + 1);
-          periodEnd = new Date(endDate.getTime() + periodLength);
-          result.nextData = await getDataPoints(periodStart, periodEnd);
-          break;
-      }
-    }
-
-    console.log('✅ Expense comparison fetched successfully');
-    res.json(result);
-  } catch (err) {
-    console.error('❌ Error fetching expense comparison:', err.message);
-    res.status(500).json({ message: err.message });
-  }
-});
+router.get('/stats', dashboardController.getStats);
 
 /**
- * GET /dashboard/expense-categories - Get expense by category
+ * @swagger
+ * /api/dashboard/revenue-comparison:
+ *   get:
+ *     summary: Get revenue comparison data
+ *     description: Retrieve revenue comparison data for analytics and reporting
+ *     tags: [Dashboard]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: period
+ *         schema:
+ *           type: string
+ *           enum: [daily, weekly, monthly, yearly]
+ *         description: Time period for comparison
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Start date for comparison range
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: End date for comparison range
+ *     responses:
+ *       200:
+ *         description: Revenue comparison data retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 currentPeriod:
+ *                   type: number
+ *                 previousPeriod:
+ *                   type: number
+ *                 percentageChange:
+ *                   type: number
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       500:
+ *         description: Internal server error
  */
-router.get('/expense-categories', async (req, res) => {
-  try {
-    const { timePeriod = 'month', startDate: customStart, endDate: customEnd } = req.query;
-    const { startDate, endDate } = getDateRange(timePeriod, customStart, customEnd);
+router.get('/revenue-comparison', dashboardController.getRevenueComparison);
 
-    console.log('📊 Fetching expense categories');
+/**
+ * @swagger
+ * /api/dashboard/expense-comparison:
+ *   get:
+ *     summary: Get expense comparison data
+ *     description: Retrieve expense comparison data for analytics and reporting
+ *     tags: [Dashboard]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: period
+ *         schema:
+ *           type: string
+ *           enum: [daily, weekly, monthly, yearly]
+ *         description: Time period for comparison
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Start date for comparison range
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: End date for comparison range
+ *     responses:
+ *       200:
+ *         description: Expense comparison data retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 currentPeriod:
+ *                   type: number
+ *                 previousPeriod:
+ *                   type: number
+ *                 percentageChange:
+ *                   type: number
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       500:
+ *         description: Internal server error
+ */
+router.get('/expense-comparison', dashboardController.getExpenseComparison);
 
-    const expenses = await Expense.find({
-      ...req.tenantFilter,
-      date: { $gte: startDate, $lte: endDate }
-    });
-
-    // Group by category
-    const categoryData = {};
-    expenses.forEach(expense => {
-      const category = expense.category || 'Other';
-      if (!categoryData[category]) {
-        categoryData[category] = 0;
-      }
-      categoryData[category] += parseDecimal(expense.amount);
-    });
-
-    // Define colors for categories
-    const categoryColors = {
-      'Food': '#FF6384',
-      'Utilities': '#36A2EB',
-      'Maintenance': '#FFCE56',
-      'Salary': '#4BC0C0',
-      'Supplies': '#9966FF',
-      'Marketing': '#FF9F40',
-      'Other': '#C9CBCF'
-    };
-
-    const result = Object.entries(categoryData).map(([category, amount]) => ({
-      category: category,
-      amount: amount,
-      color: categoryColors[category] || '#C9CBCF'
-    }));
-
-    console.log('✅ Expense categories fetched successfully');
-    res.json(result);
-  } catch (err) {
-    console.error('❌ Error fetching expense categories:', err.message);
-    res.status(500).json({ message: err.message });
-  }
-});
+/**
+ * @swagger
+ * /api/dashboard/expense-categories:
+ *   get:
+ *     summary: Get expenses by category
+ *     description: Retrieve expense breakdown by category for pie charts and analytics
+ *     tags: [Dashboard]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Start date for filtering
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: End date for filtering
+ *     responses:
+ *       200:
+ *         description: Expense categories retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   category:
+ *                     type: string
+ *                   amount:
+ *                     type: number
+ *                   percentage:
+ *                     type: number
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       500:
+ *         description: Internal server error
+ */
+router.get('/expense-categories', dashboardController.getExpenseCategories);
 
 module.exports = router;
