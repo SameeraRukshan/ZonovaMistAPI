@@ -90,3 +90,16 @@ You should receive a list of hotel documents from MongoDB.
 🕓 Auto timestamp updates for each modification
 
 🔄 Stable connection with Render-hosted database
+
+# Setup Instructions
+
+## Google Vision API Credentials
+
+1. Get the credentials from your team lead
+2. Add to `backend/.env`:
+```bash
+   GOOGLE_CLOUD_CREDENTIALS='{"type":"service_account",...}'
+```
+3. Restart server
+
+**Note:** Do NOT commit the `.env` file - it's in `.gitignore`

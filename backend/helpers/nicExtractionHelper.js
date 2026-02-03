@@ -1,4 +1,3 @@
-// helpers/nicExtractionHelper.js
 const vision = require('@google-cloud/vision');
 
 // Initialize Google Vision client with inline credentials support
