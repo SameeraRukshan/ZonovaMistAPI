@@ -145,6 +145,8 @@ vite.config.ts.timestamp-*
 *.iws
 backend/.env
 
-# Google Cloud credentials
+# Google credentials
+keys/
 *.json
-backend/keys/*.json
+!package.json
+!package-lock.json
