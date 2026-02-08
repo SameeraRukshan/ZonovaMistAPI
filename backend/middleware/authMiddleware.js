@@ -19,6 +19,18 @@ const authMiddleware = function (req, res, next) {
   }
 };
 
+const requireRoles = (...roles) => (req, res, next) => {
+  if (!req.user || !req.user.role) {
+    return res.status(403).json({ message: 'Insufficient permissions' });
+  }
+
+  if (!roles.includes(req.user.role)) {
+    return res.status(403).json({ message: 'Insufficient permissions' });
+  }
+
+  return next();
+};
+
 // Helper to add clientId when creating documents
 const addTenantId = (req, data) => {
   if (req.user && req.user.clientId) {
@@ -29,3 +41,4 @@ const addTenantId = (req, data) => {
 
 module.exports = authMiddleware;
 module.exports.addTenantId = addTenantId;
+module.exports.requireRoles = requireRoles;

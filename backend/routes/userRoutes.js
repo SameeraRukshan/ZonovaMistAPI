@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/authMiddleware');
+const { requireRoles } = require('../middleware/authMiddleware');
 const { getAllUsers, getUserById, getMyProfile } = require('../controllers/userController');
 
 // All user routes require authentication
@@ -70,7 +71,7 @@ router.use(authMiddleware);
  *       500:
  *         description: Internal server error
  */
-router.get('/', getAllUsers);
+router.get('/', requireRoles('admin', 'manager'), getAllUsers);
 
 /**
  * @swagger
@@ -189,6 +190,6 @@ router.get('/profile', getMyProfile);
  *       500:
  *         description: Internal server error
  */
-router.get('/:id', getUserById);
+router.get('/:id', requireRoles('admin', 'manager'), getUserById);
 
 module.exports = router;

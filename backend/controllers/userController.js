@@ -4,7 +4,7 @@ const User = require('../models/user');
 exports.getAllUsers = async (req, res) => {
   try {
     const users = await User.find()
-      .select('_id fullName email')
+      .select('_id fullName email role')
       .sort({ fullName: 1 });
     
     res.status(200).json({ 
@@ -25,7 +25,7 @@ exports.getAllUsers = async (req, res) => {
 exports.getUserById = async (req, res) => {
   try {
     const user = await User.findById(req.params.id)
-      .select('_id fullName email createdAt');
+      .select('_id fullName email role createdAt');
     
     if (!user) {
       return res.status(404).json({ 
