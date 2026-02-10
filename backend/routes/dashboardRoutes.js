@@ -4,24 +4,9 @@ const router = express.Router();
 const authMiddleware = require('../middleware/authMiddleware');
 const dashboardController = require('../controllers/dashboardController');
 
-// 🔥 Authentication Middleware
-const protect = async (req, res, next) => {
-  let token;
-
-  if (req.headers.authorization && req.headers.authorization.startsWith("Bearer")) {
-    try {
-      token = req.headers.authorization.split(" ")[1];
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      req.user = decoded;
-      next();
-    } catch (error) {
-      console.error("❌ Token verification failed:", error.message);
-      return res.status(401).json({ error: "Not authorized, token failed" });
-    }
-  } else {
-    return res.status(401).json({ error: "Not authorized, no token" });
-  }
-};
+// 🔥 Apply auth middleware to all routes
+// This ensures every dashboard endpoint is protected and user context is available
+router.use(authMiddleware);
 
 // Helper function to parse Decimal128
 const parseDecimal = (val) => {
@@ -58,7 +43,7 @@ const getDateRange = (timePeriod, customStartDate, customEndDate) => {
 // --------------------------------------------------
 // GET DASHBOARD STATS
 // --------------------------------------------------
-router.get("/stats", protect, async (req, res) => {
+router.get("/stats", async (req, res) => {
   try {
     const { timePeriod = 'month', startDate: customStart, endDate: customEnd } = req.query;
     
