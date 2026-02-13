@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/authMiddleware');
+const { staffReadOnly } = require('../middleware/authMiddleware');
 const staffController = require('../controllers/staffController');
 
 // Apply auth middleware to all routes
@@ -282,17 +283,20 @@ router.get('/:id', staffController.getStaffById);
  *         description: Bad request - Invalid input or email already exists
  *       401:
  *         description: Unauthorized - Invalid or missing token
+ *       403:
+ *         description: Forbidden - STAFF users have read-only access
  *       500:
  *         description: Internal server error
  */
-router.post('/', staffController.createStaff);
+// ⚠️ STAFF READ-ONLY: Block STAFF from creating staff records
+router.post('/', staffReadOnly, staffController.createStaff);
 
 /**
  * @swagger
  * /api/staff/{id}:
  *   patch:
  *     summary: Update a staff member
- *     description: Partially update an existing staff member's information
+ *     description: Partially update an existing staff member's information (Admin/Manager only)
  *     tags: [Staff]
  *     security:
  *       - bearerAuth: []
@@ -345,10 +349,13 @@ router.post('/', staffController.createStaff);
  *         description: Unauthorized - Invalid or missing token
  *       404:
  *         description: Staff member not found
+ *       403:
+ *         description: Forbidden - STAFF users have read-only access
  *       500:
  *         description: Internal server error
  */
-router.patch('/:id', staffController.updateStaff);
+// ⚠️ STAFF READ-ONLY: Block STAFF from updating staff records
+router.patch('/:id', staffReadOnly, staffController.updateStaff);
 
 /**
  * @swagger
@@ -373,9 +380,12 @@ router.patch('/:id', staffController.updateStaff);
  *         description: Unauthorized - Invalid or missing token
  *       404:
  *         description: Staff member not found
+ *       403:
+ *         description: Forbidden - STAFF users have read-only access
  *       500:
  *         description: Internal server error
  */
-router.delete('/:id', staffController.deleteStaff);
+// ⚠️ STAFF READ-ONLY: Block STAFF from deleting staff records
+router.delete('/:id', staffReadOnly, staffController.deleteStaff);
 
 module.exports = router;

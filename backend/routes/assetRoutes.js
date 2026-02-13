@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/authMiddleware');
+const { staffReadOnly } = require('../middleware/authMiddleware');
 const assetController = require('../controllers/assetController');
 
 // Apply auth middleware to all routes

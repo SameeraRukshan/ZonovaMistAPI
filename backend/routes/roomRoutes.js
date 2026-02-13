@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/authMiddleware');
+const { staffReadOnly } = require('../middleware/authMiddleware');
 const roomController = require('../controllers/roomController');
 
 // Apply auth middleware to all routes
@@ -252,10 +253,13 @@ router.get('/:id', roomController.getRoomById);
  *         description: Bad request - Invalid input or room number already exists
  *       401:
  *         description: Unauthorized - Invalid or missing token
+ *       403:
+ *         description: Forbidden - STAFF users have read-only access
  *       500:
  *         description: Internal server error
  */
-router.post('/', roomController.createRoom);
+// ⚠️ STAFF READ-ONLY: Block STAFF from creating rooms
+router.post('/', staffReadOnly, roomController.createRoom);
 
 /**
  * @swagger
@@ -305,12 +309,15 @@ router.post('/', roomController.createRoom);
  *         description: Bad request - Invalid input
  *       401:
  *         description: Unauthorized - Invalid or missing token
+ *       403:
+ *         description: Forbidden - STAFF users have read-only access
  *       404:
  *         description: Room not found
  *       500:
  *         description: Internal server error
  */
-router.patch('/:id', roomController.updateRoom);
+// ⚠️ STAFF READ-ONLY: Block STAFF from updating rooms
+router.patch('/:id', staffReadOnly, roomController.updateRoom);
 
 /**
  * @swagger
@@ -333,11 +340,14 @@ router.patch('/:id', roomController.updateRoom);
  *         description: Room deleted successfully
  *       401:
  *         description: Unauthorized - Invalid or missing token
+ *       403:
+ *         description: Forbidden - STAFF users have read-only access
  *       404:
  *         description: Room not found
  *       500:
  *         description: Internal server error
  */
-router.delete('/:id', roomController.deleteRoom);
+// ⚠️ STAFF READ-ONLY: Block STAFF from deleting rooms
+router.delete('/:id', staffReadOnly, roomController.deleteRoom);
 
 module.exports = router;
