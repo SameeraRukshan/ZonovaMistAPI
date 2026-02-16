@@ -380,14 +380,22 @@ router.post('/:id/complete', upload.array('images', 10), completeTodo);
  *           type: string
  *         description: Todo ID
  *     requestBody:
+ *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
+ *             required:
+ *               - rating
  *             properties:
- *               approvalNotes:
+ *               rating:
+ *                 type: number
+ *                 minimum: 1
+ *                 maximum: 5
+ *                 description: Performance rating for the completed task
+ *               ratingComment:
  *                 type: string
- *                 description: Optional notes for approval
+ *                 description: Optional review comment
  *     responses:
  *       200:
  *         description: Todo approved successfully
@@ -537,6 +545,15 @@ router.delete('/:id', deleteTodo);
  *         rejectionReason:
  *           type: string
  *         completedAt:
+ *           type: string
+ *           format: date-time
+ *         rating:
+ *           type: number
+ *           minimum: 1
+ *           maximum: 5
+ *         ratingComment:
+ *           type: string
+ *         ratedAt:
  *           type: string
  *           format: date-time
  *         approvedAt:

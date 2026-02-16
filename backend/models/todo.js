@@ -53,6 +53,27 @@ const todoSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  rating: {
+    type: Number,
+    min: 1,
+    max: 5,
+    default: null
+  },
+  ratingComment: {
+    type: String,
+    default: '',
+    trim: true,
+    maxlength: 500
+  },
+  ratedAt: {
+    type: Date,
+    default: null
+  },
+  ratedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
   // Soft delete fields
   deleted: { 
     type: Boolean, 

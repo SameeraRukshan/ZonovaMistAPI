@@ -135,6 +135,10 @@ exports.updateTodo = async (req, res) => {
     delete updates.deleted;
     delete updates.images;
     delete updates.clientId; // Prevent clientId modification
+    delete updates.rating;
+    delete updates.ratingComment;
+    delete updates.ratedAt;
+    delete updates.ratedBy;
     
     const todo = await Todo.findOneAndUpdate(
       { _id: id, ...req.tenantFilter, deleted: false },
@@ -219,17 +223,53 @@ exports.completeTodo = async (req, res) => {
 exports.approveTodo = async (req, res) => {
   try {
     const { id } = req.params;
+    const { rating, ratingComment } = req.body || {};
+    const parsedRating = Number(rating);
+
+    if (rating === undefined || rating === null || Number.isNaN(parsedRating)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Rating is required and must be a number between 1 and 5'
+      });
+    }
+
+    if (parsedRating < 1 || parsedRating > 5) {
+      return res.status(400).json({
+        success: false,
+        message: 'Rating must be between 1 and 5'
+      });
+    }
+
+    if (
+      ratingComment !== undefined &&
+      ratingComment !== null &&
+      typeof ratingComment !== 'string'
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'Rating comment must be a string'
+      });
+    }
+
+    const trimmedComment = typeof ratingComment === 'string'
+      ? ratingComment.trim()
+      : '';
     
     const todo = await Todo.findOneAndUpdate(
       { _id: id, ...req.tenantFilter, deleted: false, status: 'Completed' },
       { 
         status: 'Approved',
-        approvedAt: new Date()
+        approvedAt: new Date(),
+        rating: parsedRating,
+        ratingComment: trimmedComment,
+        ratedAt: new Date(),
+        ratedBy: req.user.id
       },
-      { new: true }
+      { new: true, runValidators: true }
     )
       .populate('assignedTo', 'fullName email')
-      .populate('createdBy', 'fullName email');
+      .populate('createdBy', 'fullName email')
+      .populate('ratedBy', 'fullName email');
     
     if (!todo) {
       return res.status(404).json({ 
