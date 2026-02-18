@@ -4,6 +4,12 @@ const userSchema = new mongoose.Schema({
   fullName: { type: String, required: true },
   email:    { type: String, required: true, unique: true },
   password: { type: String, required: true },
+  role: {
+    type: String,
+    enum: ['admin', 'manager', 'staff', 'user'],
+    default: 'user',
+    index: true
+  },
   clientId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Client',

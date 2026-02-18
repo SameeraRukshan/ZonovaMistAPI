@@ -1,6 +1,13 @@
 const Expense = require("../models/expense");
 const Booking = require("../models/booking");
 
+// Logger helper
+const logger = {
+  info: (msg) => console.log(`[✅ INFO] ${msg}`),
+  error: (msg, err) => console.error(`[❌ ERROR] ${msg}`, err?.message || ''),
+  warn: (msg) => console.warn(`[⚠️  WARN] ${msg}`)
+};
+
 // Helper function to parse Decimal128
 const parseDecimal = (val) => {
   if (val === null || val === undefined) return 0;
@@ -41,9 +48,20 @@ const getDateRange = (timePeriod, customStartDate, customEndDate) => {
  */
 const getStats = async (req, res) => {
   try {
-    console.log('📊 Fetching dashboard stats');
+    logger.info('Fetching dashboard stats');
     const { timePeriod = 'month', startDate: customStart, endDate: customEnd } = req.query;
     const { startDate, endDate } = getDateRange(timePeriod, customStart, customEnd);
+
+    // Validate models exist
+    if (!Expense || typeof Expense.find !== 'function') {
+      logger.warn('Expense model not properly loaded');
+      return res.json(getSafeFallbackStats());
+    }
+
+    if (!Booking || typeof Booking.find !== 'function') {
+      logger.warn('Booking model not properly loaded');
+      return res.json(getSafeFallbackStats());
+    }
 
     // Get previous period for comparison
     const periodLength = endDate - startDate;
@@ -55,6 +73,9 @@ const getStats = async (req, res) => {
       ...req.tenantFilter,
       checkin_date: { $gte: startDate, $lte: endDate },
       deleted: { $ne: true }
+    }).catch(err => {
+      logger.error('Failed to fetch current bookings', err);
+      return [];
     });
 
     // Previous period bookings
@@ -62,18 +83,27 @@ const getStats = async (req, res) => {
       ...req.tenantFilter,
       checkin_date: { $gte: prevStartDate, $lte: prevEndDate },
       deleted: { $ne: true }
+    }).catch(err => {
+      logger.error('Failed to fetch previous bookings', err);
+      return [];
     });
 
     // Current period expenses
     const currentExpenses = await Expense.find({
       ...req.tenantFilter,
       date: { $gte: startDate, $lte: endDate }
+    }).catch(err => {
+      logger.error('Failed to fetch current expenses', err);
+      return [];
     });
 
     // Previous period expenses
     const prevExpenses = await Expense.find({
       ...req.tenantFilter,
       date: { $gte: prevStartDate, $lte: prevEndDate }
+    }).catch(err => {
+      logger.error('Failed to fetch previous expenses', err);
+      return [];
     });
 
     // Calculate current values
@@ -118,23 +148,38 @@ const getStats = async (req, res) => {
       }
     };
 
-    console.log('✅ Dashboard stats fetched successfully');
+    logger.info('Dashboard stats fetched successfully');
     res.json(response);
   } catch (err) {
-    console.error('❌ Error fetching dashboard stats:', err.message);
-    res.status(500).json({ message: err.message });
+    logger.error('Error fetching dashboard stats', err);
+    // Return safe fallback to keep server stable
+    res.status(200).json(getSafeFallbackStats());
   }
 };
+
+/**
+ * Safe fallback stats response when data fetch fails
+ */
+const getSafeFallbackStats = () => ({
+  revenue: { value: 0, trend: '0%', isPositive: false },
+  advances: { value: 0, trend: '0%', isPositive: false },
+  commission: { value: 0, trend: '0%', isPositive: false },
+  expenses: { value: 0, trend: '0%', isPositive: false }
+});
 
 /**
  * GET /dashboard/revenue-comparison - Get revenue comparison data
  */
 const getRevenueComparison = async (req, res) => {
   try {
+    logger.info('Fetching revenue comparison');
     const { timePeriod = 'month', comparisons: comparisonsStr = 'now', startDate: customStart, endDate: customEnd } = req.query;
     const comparisons = comparisonsStr.split(',');
     
-    console.log('📊 Fetching revenue comparison:', { timePeriod, comparisons });
+    if (!Booking || typeof Booking.find !== 'function') {
+      logger.warn('Booking model not properly loaded for revenue comparison');
+      return res.json({ prevData: [], nowData: [], nextData: [] });
+    }
 
     const { startDate, endDate } = getDateRange(timePeriod, customStart, customEnd);
     const periodLength = endDate - startDate;
@@ -147,27 +192,32 @@ const getRevenueComparison = async (req, res) => {
 
     // Helper to get data points for a period
     const getDataPoints = async (periodStart, periodEnd) => {
-      const bookings = await Booking.find({
-        ...req.tenantFilter,
-        checkin_date: { $gte: periodStart, $lte: periodEnd },
-        deleted: { $ne: true }
-      }).sort({ checkin_date: 1 });
+      try {
+        const bookings = await Booking.find({
+          ...req.tenantFilter,
+          checkin_date: { $gte: periodStart, $lte: periodEnd },
+          deleted: { $ne: true }
+        }).sort({ checkin_date: 1 });
 
-      // Group by day
-      const dailyData = {};
-      bookings.forEach(booking => {
-        const dateKey = booking.checkin_date.toISOString().split('T')[0];
-        if (!dailyData[dateKey]) {
-          dailyData[dateKey] = 0;
-        }
-        dailyData[dateKey] += parseDecimal(booking.total_price);
-      });
+        // Group by day
+        const dailyData = {};
+        bookings.forEach(booking => {
+          const dateKey = booking.checkin_date.toISOString().split('T')[0];
+          if (!dailyData[dateKey]) {
+            dailyData[dateKey] = 0;
+          }
+          dailyData[dateKey] += parseDecimal(booking.total_price);
+        });
 
-      return Object.entries(dailyData).map(([date, value]) => ({
-        label: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        value: value,
-        date: date
-      }));
+        return Object.entries(dailyData).map(([date, value]) => ({
+          label: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          value: value,
+          date: date
+        }));
+      } catch (err) {
+        logger.error('Error calculating data points for revenue comparison', err);
+        return [];
+      }
     };
 
     // Process each comparison period
@@ -191,11 +241,12 @@ const getRevenueComparison = async (req, res) => {
       }
     }
 
-    console.log('✅ Revenue comparison fetched successfully');
+    logger.info('Revenue comparison fetched successfully');
     res.json(result);
   } catch (err) {
-    console.error('❌ Error fetching revenue comparison:', err.message);
-    res.status(500).json({ message: err.message });
+    logger.error('Error fetching revenue comparison', err);
+    // Return safe empty arrays to keep server stable
+    res.status(200).json({ prevData: [], nowData: [], nextData: [] });
   }
 };
 
@@ -204,10 +255,14 @@ const getRevenueComparison = async (req, res) => {
  */
 const getExpenseComparison = async (req, res) => {
   try {
+    logger.info('Fetching expense comparison');
     const { timePeriod = 'month', comparisons: comparisonsStr = 'now', startDate: customStart, endDate: customEnd } = req.query;
     const comparisons = comparisonsStr.split(',');
     
-    console.log('📊 Fetching expense comparison:', { timePeriod, comparisons });
+    if (!Expense || typeof Expense.find !== 'function') {
+      logger.warn('Expense model not properly loaded for expense comparison');
+      return res.json({ prevData: [], nowData: [], nextData: [] });
+    }
 
     const { startDate, endDate } = getDateRange(timePeriod, customStart, customEnd);
     const periodLength = endDate - startDate;
@@ -220,26 +275,31 @@ const getExpenseComparison = async (req, res) => {
 
     // Helper to get data points for a period
     const getDataPoints = async (periodStart, periodEnd) => {
-      const expenses = await Expense.find({
-        ...req.tenantFilter,
-        date: { $gte: periodStart, $lte: periodEnd }
-      }).sort({ date: 1 });
+      try {
+        const expenses = await Expense.find({
+          ...req.tenantFilter,
+          date: { $gte: periodStart, $lte: periodEnd }
+        }).sort({ date: 1 });
 
-      // Group by day
-      const dailyData = {};
-      expenses.forEach(expense => {
-        const dateKey = expense.date.toISOString().split('T')[0];
-        if (!dailyData[dateKey]) {
-          dailyData[dateKey] = 0;
-        }
-        dailyData[dateKey] += parseDecimal(expense.amount);
-      });
+        // Group by day
+        const dailyData = {};
+        expenses.forEach(expense => {
+          const dateKey = expense.date.toISOString().split('T')[0];
+          if (!dailyData[dateKey]) {
+            dailyData[dateKey] = 0;
+          }
+          dailyData[dateKey] += parseDecimal(expense.amount);
+        });
 
-      return Object.entries(dailyData).map(([date, value]) => ({
-        label: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        value: value,
-        date: date
-      }));
+        return Object.entries(dailyData).map(([date, value]) => ({
+          label: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          value: value,
+          date: date
+        }));
+      } catch (err) {
+        logger.error('Error calculating data points for expense comparison', err);
+        return [];
+      }
     };
 
     // Process each comparison period
@@ -263,11 +323,12 @@ const getExpenseComparison = async (req, res) => {
       }
     }
 
-    console.log('✅ Expense comparison fetched successfully');
+    logger.info('Expense comparison fetched successfully');
     res.json(result);
   } catch (err) {
-    console.error('❌ Error fetching expense comparison:', err.message);
-    res.status(500).json({ message: err.message });
+    logger.error('Error fetching expense comparison', err);
+    // Return safe empty arrays to keep server stable
+    res.status(200).json({ prevData: [], nowData: [], nextData: [] });
   }
 };
 
@@ -276,14 +337,21 @@ const getExpenseComparison = async (req, res) => {
  */
 const getExpenseCategories = async (req, res) => {
   try {
+    logger.info('Fetching expense categories');
     const { timePeriod = 'month', startDate: customStart, endDate: customEnd } = req.query;
     const { startDate, endDate } = getDateRange(timePeriod, customStart, customEnd);
 
-    console.log('📊 Fetching expense categories');
+    if (!Expense || typeof Expense.find !== 'function') {
+      logger.warn('Expense model not properly loaded for expense categories');
+      return res.json([]);
+    }
 
     const expenses = await Expense.find({
       ...req.tenantFilter,
       date: { $gte: startDate, $lte: endDate }
+    }).catch(err => {
+      logger.error('Failed to fetch expenses for categories', err);
+      return [];
     });
 
     // Group by category
@@ -298,12 +366,13 @@ const getExpenseCategories = async (req, res) => {
 
     // Define colors for categories
     const categoryColors = {
-      'Food': '#FF6384',
-      'Utilities': '#36A2EB',
-      'Maintenance': '#FFCE56',
+      'Light Bill': '#FF6384',
+      'Water Bill': '#36A2EB',
+      'Internet Bill': '#FFCE56',
       'Salary': '#4BC0C0',
-      'Supplies': '#9966FF',
-      'Marketing': '#FF9F40',
+      'Cleaning': '#9966FF',
+      'Rent': '#FF9F40',
+      'Purchases': '#C9CBCF',
       'Other': '#C9CBCF'
     };
 
@@ -313,11 +382,12 @@ const getExpenseCategories = async (req, res) => {
       color: categoryColors[category] || '#C9CBCF'
     }));
 
-    console.log('✅ Expense categories fetched successfully');
+    logger.info('Expense categories fetched successfully');
     res.json(result);
   } catch (err) {
-    console.error('❌ Error fetching expense categories:', err.message);
-    res.status(500).json({ message: err.message });
+    logger.error('Error fetching expense categories', err);
+    // Return safe empty array to keep server stable
+    res.status(200).json([]);
   }
 };
 

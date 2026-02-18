@@ -15,6 +15,7 @@ const {
   deleteTodo
 } = require('../controllers/todoController');
 const verifyToken = require('../middleware/authMiddleware');
+const { staffReadOnly } = require('../middleware/authMiddleware');
 
 // Multer configuration for image uploads
 const storage = multer.diskStorage({

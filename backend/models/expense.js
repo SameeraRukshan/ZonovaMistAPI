@@ -34,23 +34,6 @@ const expenseSchema = new mongoose.Schema({
     ref: 'Client', 
     required: false  // Optional for backward compatibility
   },
-  amount: {
-    type: mongoose.Schema.Types.Decimal128,
-    required: true,
-    default: 0
-  },
-  date: {
-    type: Date,
-    required: true,
-    default: Date.now
-  },
-  description: {
-    type: String,
-    default: '',
-    trim: true
-  },
-  images: [imageSchema],
-  
   // Soft delete fields
   deleted: { 
     type: Boolean, 
@@ -82,4 +65,4 @@ expenseSchema.virtual('amountValue').get(function() {
 expenseSchema.set('toJSON', { virtuals: true });
 expenseSchema.set('toObject', { virtuals: true });
 
-module.exports = mongoose.model('Expense', expenseSchema,);
+module.exports = mongoose.model('Expense', expenseSchema);

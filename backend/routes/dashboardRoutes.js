@@ -3,25 +3,12 @@ const express = require("express");
 const router = express.Router();
 const authMiddleware = require('../middleware/authMiddleware');
 const dashboardController = require('../controllers/dashboardController');
+const Expense = require('../models/expense');
+const Booking = require('../models/booking');
 
-// 🔥 Authentication Middleware
-const protect = async (req, res, next) => {
-  let token;
-
-  if (req.headers.authorization && req.headers.authorization.startsWith("Bearer")) {
-    try {
-      token = req.headers.authorization.split(" ")[1];
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      req.user = decoded;
-      next();
-    } catch (error) {
-      console.error("❌ Token verification failed:", error.message);
-      return res.status(401).json({ error: "Not authorized, token failed" });
-    }
-  } else {
-    return res.status(401).json({ error: "Not authorized, no token" });
-  }
-};
+// 🔥 Apply auth middleware to all routes
+// This ensures every dashboard endpoint is protected and user context is available
+router.use(authMiddleware);
 
 // Helper function to parse Decimal128
 const parseDecimal = (val) => {
@@ -54,122 +41,6 @@ const getDateRange = (timePeriod, customStartDate, customEndDate) => {
 
   return { startDate, endDate };
 };
-
-// --------------------------------------------------
-// GET DASHBOARD STATS
-// --------------------------------------------------
-router.get("/stats", protect, async (req, res) => {
-  try {
-    const { timePeriod = 'month', startDate: customStart, endDate: customEnd } = req.query;
-    
-    const { startDate, endDate } = getDateRange(timePeriod, customStart, customEnd);
-    
-    console.log("📊 Fetching stats from", startDate, "to", endDate);
-
-    // Get expenses for current period
-    const expenses = await Expense.find({
-      deleted: false,
-      date: { $gte: startDate, $lte: endDate }
-    });
-
-    const totalExpenses = expenses.reduce((sum, exp) => sum + parseDecimal(exp.amount), 0);
-
-    // Get bookings for revenue calculation
-    const bookings = await Booking.find({
-      checkin_date: { $gte: startDate, $lte: endDate }
-    });
-
-    const totalRevenue = bookings.reduce((sum, booking) => 
-      sum + parseDecimal(booking.total_price), 0);
-    
-    const totalAdvances = bookings.reduce((sum, booking) => 
-      sum + parseDecimal(booking.advance_amount), 0);
-    
-    const totalCommission = bookings.reduce((sum, booking) => 
-      sum + parseDecimal(booking.commission_amount), 0);
-
-    // Calculate previous period for trend
-    const periodLength = endDate - startDate;
-    const prevStartDate = new Date(startDate.getTime() - periodLength);
-    const prevEndDate = new Date(startDate.getTime() - 1);
-
-    // Current period bookings
-    const currentBookings = await Booking.find({
-      ...req.tenantFilter,
-      checkin_date: { $gte: startDate, $lte: endDate },
-      deleted: { $ne: true }
-    });
-
-    // Previous period bookings
-    const prevBookings = await Booking.find({
-      ...req.tenantFilter,
-      checkin_date: { $gte: prevStartDate, $lte: prevEndDate },
-      deleted: { $ne: true }
-    });
-
-    // Current period expenses
-    const currentExpenses = await Expense.find({
-      ...req.tenantFilter,
-      date: { $gte: startDate, $lte: endDate }
-    });
-
-    // Previous period expenses
-    const prevExpenses = await Expense.find({
-      ...req.tenantFilter,
-      date: { $gte: prevStartDate, $lte: prevEndDate }
-    });
-
-    // Calculate current values
-    const currentRevenue = currentBookings.reduce((sum, b) => sum + parseDecimal(b.total_price), 0);
-    const currentAdvances = currentBookings.reduce((sum, b) => sum + parseDecimal(b.advance_amount), 0);
-    const currentCommission = currentBookings.reduce((sum, b) => sum + parseDecimal(b.commission || 0), 0);
-    const currentExpenseTotal = currentExpenses.reduce((sum, e) => sum + parseDecimal(e.amount), 0);
-
-    // Calculate previous values
-    const prevRevenue = prevBookings.reduce((sum, b) => sum + parseDecimal(b.total_price), 0);
-    const prevAdvances = prevBookings.reduce((sum, b) => sum + parseDecimal(b.advance_amount), 0);
-    const prevCommission = prevBookings.reduce((sum, b) => sum + parseDecimal(b.commission || 0), 0);
-    const prevExpenseTotal = prevExpenses.reduce((sum, e) => sum + parseDecimal(e.amount), 0);
-
-    // Calculate trends
-    const calcTrend = (current, previous) => {
-      if (previous === 0) return current > 0 ? '+100%' : '0%';
-      const change = ((current - previous) / previous) * 100;
-      return `${change >= 0 ? '+' : ''}${change.toFixed(1)}%`;
-    };
-
-    const response = {
-      revenue: {
-        value: currentRevenue,
-        trend: calcTrend(currentRevenue, prevRevenue),
-        isPositive: currentRevenue >= prevRevenue
-      },
-      advances: {
-        value: currentAdvances,
-        trend: calcTrend(currentAdvances, prevAdvances),
-        isPositive: currentAdvances >= prevAdvances
-      },
-      commission: {
-        value: currentCommission,
-        trend: calcTrend(currentCommission, prevCommission),
-        isPositive: currentCommission >= prevCommission
-      },
-      expenses: {
-        value: currentExpenseTotal,
-        trend: calcTrend(currentExpenseTotal, prevExpenseTotal),
-        isPositive: currentExpenseTotal <= prevExpenseTotal // Lower expenses is positive
-      }
-    };
-
-    console.log('✅ Dashboard stats fetched successfully');
-    res.json(response);
-  } catch (err) {
-    console.error('❌ Error fetching dashboard stats:', err.message);
-    res.status(500).json({ message: err.message });
-  }
-});
-// Apply auth middleware to all routes
-router.use(authMiddleware);
 
 /**
  * @swagger
