@@ -385,6 +385,31 @@ router.patch('/:id', staffReadOnly, staffController.updateStaff);
  *       500:
  *         description: Internal server error
  */
+/**
+ * @swagger
+ * /api/staff/{id}/performance:
+ *   get:
+ *     summary: Get staff performance metrics
+ *     description: Retrieve performance stats like average rating and recent reviews
+ *     tags: [Staff]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Performance metrics retrieved
+ *       404:
+ *         description: Staff member not found
+ *       500:
+ *         description: Server error
+ */
+router.get('/:id/performance', staffController.getStaffPerformance);
+
 // ⚠️ STAFF READ-ONLY: Block STAFF from deleting staff records
 router.delete('/:id', staffReadOnly, staffController.deleteStaff);
 
