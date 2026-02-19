@@ -28,26 +28,24 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ 
+const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB limit to support videos
   fileFilter: (req, file, cb) => {
-    console.log('File received:', {
-      fieldname: file.fieldname,
-      originalname: file.originalname,
-      mimetype: file.mimetype,
-      size: file.size
-    });
-    
-    // Accept all image types and don't validate MIME type too strictly
     const ext = path.extname(file.originalname).toLowerCase();
-    const allowedExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
-    
-    if (file.mimetype.startsWith('image/') || allowedExts.includes(ext)) {
+    const allowedImageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic', '.heif'];
+    const allowedVideoExts = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.3gp', '.m4v'];
+
+    console.log(`Processing file: ${file.originalname}, MIME: ${file.mimetype}, Ext: ${ext}`);
+
+    const isImage = file.mimetype.startsWith('image/') || allowedImageExts.includes(ext);
+    const isVideo = file.mimetype.startsWith('video/') || allowedVideoExts.includes(ext);
+
+    if (isImage || isVideo) {
       cb(null, true);
     } else {
-      console.error('Invalid file type:', file.mimetype, 'ext:', ext);
-      cb(new Error('Only image files are allowed'));
+      console.error(`Rejected file: ${file.originalname}, MIME: ${file.mimetype}`);
+      cb(new Error(`File type not supported (${file.mimetype}). Please upload images or videos.`));
     }
   }
 });

@@ -186,19 +186,21 @@ exports.completeTodo = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Todo not found' });
     }
 
-    // Upload images to Cloudinary
+    // Upload files to Cloudinary
     const uploadPromises = req.files.map(file =>
       cloudinary.uploader.upload(file.path, {
         folder: 'todos',
+        resource_type: 'auto' // Automatically detect if it's an image or video
       })
     );
 
     const uploadResults = await Promise.all(uploadPromises);
 
-    // Add images to todo
+    // Add media to todo
     const images = uploadResults.map(result => ({
       url: result.secure_url,
-      public_id: result.public_id
+      public_id: result.public_id,
+      resourceType: result.resource_type // 'image' or 'video'
     }));
 
     todo.images.push(...images);

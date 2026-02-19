@@ -2,7 +2,8 @@ const mongoose = require('mongoose');
 
 const imageSchema = new mongoose.Schema({
   url: { type: String, required: true },
-  public_id: { type: String, required: true }
+  public_id: { type: String, required: true },
+  resourceType: { type: String, default: 'image' } // 'image' or 'video'
 });
 
 const todoSchema = new mongoose.Schema({
