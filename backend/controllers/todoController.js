@@ -2,19 +2,28 @@ const Todo = require('../models/todo');
 const cloudinary = require('../config/cloudinary');
 const { addTenantId } = require('../middleware/authMiddleware');
 
-// Get all todos created by logged in user
+// Get all todos (Admins/Managers see all for tenant, others see what they created)
 exports.getAllTodos = async (req, res) => {
   try {
-    const todos = await Todo.find({
+    const isManagement = ['admin', 'manager', 'owner'].includes(req.user.role.toLowerCase());
+
+    const query = {
       ...req.tenantFilter,
-      createdBy: req.user.id,
       deleted: false
-    })
+    };
+
+    // If not management, only show tasks they created 
+    // (Note: They might also want to see tasks assigned to them, but we have getMyTodos for that)
+    if (!isManagement) {
+      query.createdBy = req.user.id;
+    }
+
+    const todos = await Todo.find(query)
       .populate('assignedTo', 'fullName email')
       .populate('createdBy', 'fullName email')
       .sort({ createdDate: -1 });
 
-    res.status(200).json({ success: true, todos });
+    res.status(200).json({ success: true, count: todos.length, todos });
   } catch (error) {
     console.error('Error fetching todos:', error);
     res.status(500).json({ success: false, message: 'Server error', error: error.message });
@@ -226,65 +235,50 @@ exports.completeTodo = async (req, res) => {
 exports.approveTodo = async (req, res) => {
   try {
     const { id } = req.params;
-    const { rating, ratingComment } = req.body || {};
-    const parsedRating = Number(rating);
+    const { rating, ratingComment } = req.body;
 
-    if (rating === undefined || rating === null || Number.isNaN(parsedRating)) {
+    // Convert rating to number and validate
+    const parsedRating = parseFloat(rating);
+
+    if (isNaN(parsedRating) || parsedRating < 1 || parsedRating > 5) {
       return res.status(400).json({
         success: false,
-        message: 'Rating is required and must be a number between 1 and 5'
+        message: 'A valid rating between 1 and 5 is required for approval'
       });
     }
 
-    if (parsedRating < 1 || parsedRating > 5) {
-      return res.status(400).json({
-        success: false,
-        message: 'Rating must be between 1 and 5'
-      });
-    }
+    const trimmedComment = (ratingComment || '').toString().trim();
 
-    if (
-      ratingComment !== undefined &&
-      ratingComment !== null &&
-      typeof ratingComment !== 'string'
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: 'Rating comment must be a string'
-      });
-    }
-
-    const trimmedComment = typeof ratingComment === 'string'
-      ? ratingComment.trim()
-      : '';
-
-    const todo = await Todo.findOneAndUpdate(
-      { _id: id, ...req.tenantFilter, deleted: false, status: 'Completed' },
-      {
-        status: 'Approved',
-        approvedAt: new Date(),
-        rating: parsedRating,
-        ratingComment: trimmedComment,
-        rejectionComment: '', // Clear rejection comment on approval
-        ratedAt: new Date(),
-        ratedBy: req.user.id
-      },
-      { new: true, runValidators: true }
-    )
-      .populate('assignedTo', 'fullName email')
-      .populate('createdBy', 'fullName email')
-      .populate('ratedBy', 'fullName email');
+    // Find first to verify existence and current status
+    const todo = await Todo.findOne({
+      _id: id,
+      ...req.tenantFilter,
+      deleted: false
+    });
 
     if (!todo) {
-      return res.status(404).json({
-        success: false,
-        message: 'Todo not found or not in Completed status'
-      });
+      return res.status(404).json({ success: false, message: 'Todo not found' });
     }
+
+    // Update status, rating and metadata
+    todo.status = 'Approved';
+    todo.approvedAt = new Date();
+    todo.rating = parsedRating;
+    todo.ratingComment = trimmedComment;
+    todo.rejectionComment = ''; // Clear any previous rejection
+    todo.ratedAt = new Date();
+    todo.ratedBy = req.user.id;
+
+    await todo.save();
+
+    // Population for response
+    await todo.populate('assignedTo', 'fullName email');
+    await todo.populate('createdBy', 'fullName email');
+    await todo.populate('ratedBy', 'fullName email');
 
     res.status(200).json({
       success: true,
-      message: 'Todo approved successfully',
+      message: 'Todo approved and rated successfully',
       todo
     });
   } catch (error) {
@@ -299,39 +293,53 @@ exports.rejectTodo = async (req, res) => {
     const { id } = req.params;
     const { comment } = req.body;
 
-    const todo = await Todo.findOneAndUpdate(
-      { _id: id, ...req.tenantFilter, deleted: false, status: 'Completed' },
-      {
-        status: 'New',
-        completedAt: null,
-        images: [], // Clear images on reject
-        rejectionComment: comment || '',
-        rating: null,
-        ratingComment: ''
-      },
-      { new: true }
-    )
-      .populate('assignedTo', 'fullName email')
-      .populate('createdBy', 'fullName email');
+    // 1. Find the todo first. Allowed to reject from Completed or Approved status.
+    const todo = await Todo.findOne({
+      _id: id,
+      ...req.tenantFilter,
+      deleted: false,
+      status: { $in: ['Completed', 'Approved'] }
+    });
 
     if (!todo) {
       return res.status(404).json({
         success: false,
-        message: 'Todo not found or not in Completed status'
+        message: 'Todo not found or not in a states that can be rejected (Completed/Approved)'
       });
     }
 
-    // Delete images from Cloudinary
+    // 2. Delete images from Cloudinary if they exist
     if (todo.images && todo.images.length > 0) {
-      const deletePromises = todo.images.map(img =>
-        cloudinary.uploader.destroy(img.public_id)
-      );
-      await Promise.all(deletePromises);
+      try {
+        const deletePromises = todo.images.map(img =>
+          cloudinary.uploader.destroy(img.public_id, {
+            resource_type: img.resourceType || 'image'
+          })
+        );
+        await Promise.all(deletePromises);
+        console.log(`[DELETE] Deleted ${todo.images.length} images from Cloudinary for todo ${id}`);
+      } catch (cloudErr) {
+        console.error('Error deleting images from Cloudinary:', cloudErr);
+        // We continue anyway so the todo state is updated, but log the error
+      }
     }
+
+    // 3. Update the todo status and clear media
+    todo.status = 'New';
+    todo.completedAt = null;
+    todo.images = [];
+    todo.rejectionComment = comment || '';
+    todo.rating = null;
+    todo.ratingComment = '';
+
+    await todo.save();
+
+    await todo.populate('assignedTo', 'fullName email');
+    await todo.populate('createdBy', 'fullName email');
 
     res.status(200).json({
       success: true,
-      message: 'Todo rejected and reset to New',
+      message: 'Todo rejected and reset to New. Media proof has been cleared.',
       todo
     });
   } catch (error) {

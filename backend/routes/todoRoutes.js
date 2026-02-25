@@ -15,7 +15,7 @@ const {
   deleteTodo
 } = require('../controllers/todoController');
 const verifyToken = require('../middleware/authMiddleware');
-const { staffReadOnly } = require('../middleware/authMiddleware');
+const { staffReadOnly, requireRoles } = require('../middleware/authMiddleware');
 
 // Multer configuration for image uploads
 const storage = multer.diskStorage({
@@ -367,7 +367,7 @@ router.post('/:id/complete', upload.array('images', 10), completeTodo);
  * /api/todos/{id}/approve:
  *   patch:
  *     summary: Approve a completed todo
- *     description: Approve a todo that has been marked as completed (manager/admin action)
+ *     description: Approve a todo that has been marked as completed (manager/admin/owner action)
  *     tags: [Todos]
  *     security:
  *       - bearerAuth: []
@@ -398,36 +398,19 @@ router.post('/:id/complete', upload.array('images', 10), completeTodo);
  *     responses:
  *       200:
  *         description: Todo approved successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 message:
- *                   type: string
- *                 todo:
- *                   $ref: '#/components/schemas/Todo'
- *       400:
- *         description: Bad request - Todo not in completed status
- *       401:
- *         description: Unauthorized - Invalid or missing token
  *       403:
  *         description: Forbidden - Insufficient permissions
  *       404:
- *         description: Todo not found
- *       500:
- *         description: Internal server error
+ *         description: Todo not found or not completed
  */
-router.patch('/:id/approve', approveTodo);
+router.patch('/:id/approve', requireRoles('admin', 'manager', 'owner'), approveTodo);
 
 /**
  * @swagger
  * /api/todos/{id}/reject:
  *   patch:
  *     summary: Reject a completed todo
- *     description: Reject a todo that has been marked as completed, sending it back for rework
+ *     description: Reject a todo that has been marked as completed, sending it back for rework. Clears media proof.
  *     tags: [Todos]
  *     security:
  *       - bearerAuth: []
@@ -444,38 +427,19 @@ router.patch('/:id/approve', approveTodo);
  *         application/json:
  *           schema:
  *             type: object
- *             required:
- *               - rejectionReason
  *             properties:
- *               rejectionReason:
+ *               comment:
  *                 type: string
  *                 description: Reason for rejecting the todo
  *     responses:
  *       200:
  *         description: Todo rejected successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 message:
- *                   type: string
- *                 todo:
- *                   $ref: '#/components/schemas/Todo'
- *       400:
- *         description: Bad request - Todo not in completed status or missing rejection reason
- *       401:
- *         description: Unauthorized - Invalid or missing token
  *       403:
  *         description: Forbidden - Insufficient permissions
  *       404:
- *         description: Todo not found
- *       500:
- *         description: Internal server error
+ *         description: Todo not found or not completed
  */
-router.patch('/:id/reject', rejectTodo);
+router.patch('/:id/reject', requireRoles('admin', 'manager', 'owner'), rejectTodo);
 
 /**
  * @swagger
