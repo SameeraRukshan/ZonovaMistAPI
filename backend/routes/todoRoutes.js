@@ -15,7 +15,7 @@ const {
   deleteTodo
 } = require('../controllers/todoController');
 const verifyToken = require('../middleware/authMiddleware');
-const { staffReadOnly } = require('../middleware/authMiddleware');
+const { staffReadOnly, requireRoles } = require('../middleware/authMiddleware');
 
 // Multer configuration for image uploads
 const storage = multer.diskStorage({
@@ -28,26 +28,24 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ 
+const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB limit to support videos
   fileFilter: (req, file, cb) => {
-    console.log('File received:', {
-      fieldname: file.fieldname,
-      originalname: file.originalname,
-      mimetype: file.mimetype,
-      size: file.size
-    });
-    
-    // Accept all image types and don't validate MIME type too strictly
     const ext = path.extname(file.originalname).toLowerCase();
-    const allowedExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
-    
-    if (file.mimetype.startsWith('image/') || allowedExts.includes(ext)) {
+    const allowedImageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic', '.heif'];
+    const allowedVideoExts = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.3gp', '.m4v'];
+
+    console.log(`Processing file: ${file.originalname}, MIME: ${file.mimetype}, Ext: ${ext}`);
+
+    const isImage = file.mimetype.startsWith('image/') || allowedImageExts.includes(ext);
+    const isVideo = file.mimetype.startsWith('video/') || allowedVideoExts.includes(ext);
+
+    if (isImage || isVideo) {
       cb(null, true);
     } else {
-      console.error('Invalid file type:', file.mimetype, 'ext:', ext);
-      cb(new Error('Only image files are allowed'));
+      console.error(`Rejected file: ${file.originalname}, MIME: ${file.mimetype}`);
+      cb(new Error(`File type not supported (${file.mimetype}). Please upload images or videos.`));
     }
   }
 });
@@ -369,59 +367,7 @@ router.post('/:id/complete', upload.array('images', 10), completeTodo);
  * /api/todos/{id}/approve:
  *   patch:
  *     summary: Approve a completed todo
- *     description: Approve a todo that has been marked as completed (manager/admin action)
- *     tags: [Todos]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *         description: Todo ID
- *     requestBody:
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               approvalNotes:
- *                 type: string
- *                 description: Optional notes for approval
- *     responses:
- *       200:
- *         description: Todo approved successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 message:
- *                   type: string
- *                 todo:
- *                   $ref: '#/components/schemas/Todo'
- *       400:
- *         description: Bad request - Todo not in completed status
- *       401:
- *         description: Unauthorized - Invalid or missing token
- *       403:
- *         description: Forbidden - Insufficient permissions
- *       404:
- *         description: Todo not found
- *       500:
- *         description: Internal server error
- */
-router.patch('/:id/approve', approveTodo);
-
-/**
- * @swagger
- * /api/todos/{id}/reject:
- *   patch:
- *     summary: Reject a completed todo
- *     description: Reject a todo that has been marked as completed, sending it back for rework
+ *     description: Approve a todo that has been marked as completed (manager/admin/owner action)
  *     tags: [Todos]
  *     security:
  *       - bearerAuth: []
@@ -439,37 +385,61 @@ router.patch('/:id/approve', approveTodo);
  *           schema:
  *             type: object
  *             required:
- *               - rejectionReason
+ *               - rating
  *             properties:
- *               rejectionReason:
+ *               rating:
+ *                 type: number
+ *                 minimum: 1
+ *                 maximum: 5
+ *                 description: Performance rating for the completed task
+ *               ratingComment:
+ *                 type: string
+ *                 description: Optional review comment
+ *     responses:
+ *       200:
+ *         description: Todo approved successfully
+ *       403:
+ *         description: Forbidden - Insufficient permissions
+ *       404:
+ *         description: Todo not found or not completed
+ */
+router.patch('/:id/approve', requireRoles('admin', 'manager', 'owner'), approveTodo);
+
+/**
+ * @swagger
+ * /api/todos/{id}/reject:
+ *   patch:
+ *     summary: Reject a completed todo
+ *     description: Reject a todo that has been marked as completed, sending it back for rework. Clears media proof.
+ *     tags: [Todos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Todo ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               comment:
  *                 type: string
  *                 description: Reason for rejecting the todo
  *     responses:
  *       200:
  *         description: Todo rejected successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 message:
- *                   type: string
- *                 todo:
- *                   $ref: '#/components/schemas/Todo'
- *       400:
- *         description: Bad request - Todo not in completed status or missing rejection reason
- *       401:
- *         description: Unauthorized - Invalid or missing token
  *       403:
  *         description: Forbidden - Insufficient permissions
  *       404:
- *         description: Todo not found
- *       500:
- *         description: Internal server error
+ *         description: Todo not found or not completed
  */
-router.patch('/:id/reject', rejectTodo);
+router.patch('/:id/reject', requireRoles('admin', 'manager', 'owner'), rejectTodo);
 
 /**
  * @swagger
@@ -538,6 +508,15 @@ router.delete('/:id', deleteTodo);
  *         rejectionReason:
  *           type: string
  *         completedAt:
+ *           type: string
+ *           format: date-time
+ *         rating:
+ *           type: number
+ *           minimum: 1
+ *           maximum: 5
+ *         ratingComment:
+ *           type: string
+ *         ratedAt:
  *           type: string
  *           format: date-time
  *         approvedAt:

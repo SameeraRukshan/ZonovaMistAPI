@@ -12,6 +12,7 @@ const http = require('http');
 const WebSocket = require('ws');
 
 dotenv.config();
+connectDB();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -110,16 +111,23 @@ app.get('/invoice/:bookingId', async (req, res) => {
     const booking = await Booking.findById(req.params.bookingId);
     if (!booking) return res.status(404).send('Booking not found');
 
-    const checkIn = new Date(booking.checkin_date).toLocaleDateString('en-US', { 
-      year: 'numeric', month: 'long', day: 'numeric' 
+    const checkIn = new Date(booking.checkin_date).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
     });
-    const checkOut = new Date(booking.checkout_date).toLocaleDateString('en-US', { 
-      year: 'numeric', month: 'long', day: 'numeric' 
+    const checkOut = new Date(booking.checkout_date).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
     });
-    const nights = Math.ceil(
-      (new Date(booking.checkout_date) - new Date(booking.checkin_date)) / (1000 * 60 * 60 * 24)
-    );
-    
+
+    // Calculate number of nights
+    const checkInDate = new Date(booking.checkin_date);
+    const checkOutDate = new Date(booking.checkout_date);
+    const nights = Math.ceil((checkOutDate - checkInDate) / (1000 * 60 * 60 * 24));
+
+    // Parse values safely
     const totalPrice = parseFloat(booking.total_price?.toString() || '0');
     const advanceAmount = parseFloat(booking.advance_amount?.toString() || '0');
     const foodCharges = parseFloat(booking.food?.toString() || '0');
@@ -513,37 +521,6 @@ wss.on('connection', (ws) => {
   ws.on('close', () => console.log('❌ WebSocket closed'));
 });
 
-// Graceful shutdown handler
-const gracefulShutdown = (signal) => {
-  console.log(`\n⚠️  ${signal} received. Shutting down gracefully...`);
-  
-  // Close the server
-  server.close(() => {
-    console.log('✅ HTTP server closed');
-    
-    // Close all WebSocket connections
-    wss.clients.forEach((client) => {
-      if (client.readyState === 1) { // OPEN
-        client.close(1000, 'Server shutting down');
-      }
-    });
-    wss.close(() => {
-      console.log('✅ WebSocket server closed');
-      process.exit(0);
-    });
-  });
-
-  // Force shutdown after 10 seconds
-  setTimeout(() => {
-    console.error('❌ Forced shutdown after timeout');
-    process.exit(1);
-  }, 10000);
-};
-
-// Listen for termination signals
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-
 // Cron Job: daily check-in reminder at 8:00 AM
 cron.schedule('0 8 * * *', async () => {
   console.log('⏰ Running daily check-in reminder job...');
@@ -564,53 +541,20 @@ cron.schedule('0 8 * * *', async () => {
   }
 });
 
-const startServer = async () => {
-  await connectDB(); // Wait for DB to connect FIRST
-  
-  // Handle server errors
-  server.on('error', (err) => {
-    if (err.code === 'EADDRINUSE') {
-      console.error(`\n❌ ERROR: Port ${PORT} is already in use`);
-      console.error(
-        'Possible solutions:\n' +
-        `  • Change the PORT environment variable: PORT=3001 npm start\n` +
-        `  • Kill the process using the port: lsof -ti:${PORT} | xargs kill -9\n` +
-        `  • Wait for the process to release the port and restart\n`
-      );
-      
-      // Exit cleanly instead of crashing
-      console.error('⚠️  Exiting process. Please retry after addressing the port conflict.');
-      process.exit(1);
-    } else if (err.code === 'EACCES') {
-      console.error(`\n❌ ERROR: Permission denied to bind to port ${PORT}`);
-      console.error('Please use a port number above 1024 or run with elevated privileges.');
-      process.exit(1);
-    } else {
-      console.error('❌ Server error:', err);
-      process.exit(1);
-    }
+// ✅ Global error handler
+app.use((err, req, res, next) => {
+  console.error('🔥 Server Error:', err.stack);
+  res.status(500).json({ 
+    error: 'Internal Server Error',
+    message: err.message 
   });
+});
 
-  // Handle WebSocket server errors
-  wss.on('error', (err) => {
-    console.error('❌ WebSocket server error:', err);
-  });
-
-  // Listen on the configured port
-  server.listen(PORT, '0.0.0.0', () => {
-    console.log(`\n✅ Server running on http://localhost:${PORT}`);
-    console.log(`📚 API Documentation: http://localhost:${PORT}/api-docs\n`);
-  });
-
-  // Handle server listening event
-  server.on('listening', () => {
-    console.log(`✅ Server listening on port ${PORT}`);
-  });
-};
-
-startServer().catch((err) => {
-  console.error('❌ Failed to start server:', err);
-  process.exit(1);
+// Start server
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server running on http://localhost:${PORT}`);
+  console.log(`📡 API available at http://localhost:${PORT}/api`);
+  console.log(`💾 Expense API: http://localhost:${PORT}/api/expense`);
 });
 
 // Include any additional jobs

@@ -2,30 +2,31 @@ const mongoose = require('mongoose');
 
 const imageSchema = new mongoose.Schema({
   url: { type: String, required: true },
-  public_id: { type: String, required: true }
+  public_id: { type: String, required: true },
+  resourceType: { type: String, default: 'image' } // 'image' or 'video'
 });
 
 const todoSchema = new mongoose.Schema({
-  title: { 
-    type: String, 
+  title: {
+    type: String,
     required: true,
     trim: true
   },
-  description: { 
-    type: String, 
+  description: {
+    type: String,
     default: '',
     trim: true
   },
-  dueDate: { 
-    type: Date, 
+  dueDate: {
+    type: Date,
     default: () => new Date()
   },
-  priority: { 
-    type: String, 
+  priority: {
+    type: String,
     enum: ['High', 'Medium', 'Low'],
     default: 'Medium'
   },
-  assignedTo: { 
+  assignedTo: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
@@ -36,13 +37,13 @@ const todoSchema = new mongoose.Schema({
     default: 'New'
   },
   images: [imageSchema],
-  createdBy: { 
+  createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
   },
-  createdDate: { 
-    type: Date, 
+  createdDate: {
+    type: Date,
     default: Date.now
   },
   completedAt: {
@@ -53,18 +54,45 @@ const todoSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  rating: {
+    type: Number,
+    min: 1,
+    max: 5,
+    default: null
+  },
+  ratingComment: {
+    type: String,
+    default: '',
+    trim: true,
+    maxlength: 500
+  },
+  rejectionComment: {
+    type: String,
+    default: '',
+    trim: true,
+    maxlength: 500
+  },
+  ratedAt: {
+    type: Date,
+    default: null
+  },
+  ratedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
   // Soft delete fields
-  deleted: { 
-    type: Boolean, 
-    default: false 
+  deleted: {
+    type: Boolean,
+    default: false
   },
-  deletedAt: { 
-    type: Date, 
-    default: null 
+  deletedAt: {
+    type: Date,
+    default: null
   },
-  deletedBy: { 
-    type: String, 
-    default: null 
+  deletedBy: {
+    type: String,
+    default: null
   },
   clientId: {
     type: mongoose.Schema.Types.ObjectId,
