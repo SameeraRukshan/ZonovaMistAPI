@@ -6,7 +6,7 @@ const { addTenantId } = require('../middleware/authMiddleware');
 exports.getSettings = async (req, res) => {
   try {
     const settings = await Settings.findOne(req.tenantFilter);
-    res.json(settings);
+    res.json(settings ?? {});
   } catch (err) {
     res.status(500).json({ message: 'Error fetching settings', error: err.message });
   }

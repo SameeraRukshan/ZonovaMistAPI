@@ -145,6 +145,12 @@ vite.config.ts.timestamp-*
 *.iws
 backend/.env
 
+# Uploaded user files (runtime-generated, not source)
+backend/uploads/*
+!backend/uploads/.gitkeep
+uploads/*
+!uploads/.gitkeep
+
 # Google credentials
 keys/
 *.json
