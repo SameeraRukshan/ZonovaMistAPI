@@ -35,4 +35,7 @@ jobs:
           env_vars: |
             MONGO_URI=${{ secrets.MONGO_URI_DEV }}
             JWT_SECRET=${{ secrets.JWT_SECRET_DEV }}
+            OPENWA_API_KEY=${{ secrets.OPENWA_API_KEY }}
+            OPENWA_CF_CLIENT_ID=${{ secrets.OPENWA_CF_CLIENT_ID }}
+            OPENWA_CF_CLIENT_SECRET=${{ secrets.OPENWA_CF_CLIENT_SECRET }}
           flags: '--allow-unauthenticated'
