@@ -49,6 +49,7 @@ app.use('/api/staff', require('./routes/staffRoutes'));
 app.use('/api/todos', require('./routes/todoRoutes'));
 app.use('/api/assets', require('./routes/assetRoutes'));
 app.use('/api/expenses', require('./routes/expenseRoutes'));
+app.use('/api/contact', require('./routes/contactRoutes'));
 
 // Swagger
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
