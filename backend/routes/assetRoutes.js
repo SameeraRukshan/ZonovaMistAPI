@@ -65,7 +65,7 @@ router.get('/', assetController.getAllAssets);
  *       500:
  *         description: Internal server error
  */
-router.post('/', assetController.createAsset);
+router.post('/', staffReadOnly, assetController.createAsset);
 
 /**
  * @swagger
@@ -134,7 +134,7 @@ router.get('/:id', assetController.getAssetById);
  *       500:
  *         description: Internal server error
  */
-router.patch('/:id', assetController.updateAsset);
+router.patch('/:id', staffReadOnly, assetController.updateAsset);
 
 /**
  * @swagger
@@ -175,7 +175,7 @@ router.patch('/:id', assetController.updateAsset);
  *       500:
  *         description: Internal server error
  */
-router.put('/:id', assetController.updateAssetPut);
+router.put('/:id', staffReadOnly, assetController.updateAssetPut);
 
 /**
  * @swagger
@@ -203,6 +203,6 @@ router.put('/:id', assetController.updateAssetPut);
  *       500:
  *         description: Internal server error
  */
-router.delete('/:id', assetController.deleteAsset);
+router.delete('/:id', staffReadOnly, assetController.deleteAsset);
 
 module.exports = router;

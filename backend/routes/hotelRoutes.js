@@ -158,7 +158,7 @@ router.get('/:id', hotelController.getHotelById);
  *       500:
  *         description: Internal server error
  */
-router.post('/', hotelController.createHotel);
+router.post('/', staffReadOnly, hotelController.createHotel);
 
 /**
  * @swagger
@@ -216,7 +216,7 @@ router.post('/', hotelController.createHotel);
  *       500:
  *         description: Internal server error
  */
-router.patch('/:id', hotelController.updateHotel);
+router.patch('/:id', staffReadOnly, hotelController.updateHotel);
 
 /**
  * @swagger
@@ -244,6 +244,6 @@ router.patch('/:id', hotelController.updateHotel);
  *       500:
  *         description: Internal server error
  */
-router.delete('/:id', hotelController.deleteHotel);
+router.delete('/:id', staffReadOnly, hotelController.deleteHotel);
 
 module.exports = router;

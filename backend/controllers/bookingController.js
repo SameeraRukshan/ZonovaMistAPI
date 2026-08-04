@@ -3,6 +3,113 @@ const { sendAdvancePaidSMS, sendDiscountSMS } = require('../models/smsService');
 const cloudinary = require('../config/cloudinary');
 const { Readable } = require('stream');
 const { addTenantId } = require('../middleware/authMiddleware');
+const { toCents } = require('../helpers/money');
+const { generateUniqueBookingRef } = require('../helpers/bookingRef');
+
+/**
+ * Fields a client is allowed to change via PATCH /bookings/:id.
+ *
+ * This is an explicit allowlist, NOT a denylist. Anything absent here is
+ * unwritable through the API — including clientId, _id, timestamps, the soft
+ * delete flags, the SMS-sent flags, and (critically) every payment field added
+ * for the PayHere integration. Payment state is owned by the payment/webhook
+ * layer and must never be settable by a client request.
+ *
+ * When adding a genuinely user-editable field to the Booking schema, add it
+ * here deliberately. Do not switch this back to a spread of req.body.
+ */
+const BOOKING_UPDATABLE_FIELDS = [
+  'guest_nic',
+  'guest_name',
+  'booked_room_no',
+  'checkin_date',
+  'checkout_date',
+  'phone_no',
+  'adult_count',
+  'child_count',
+  'guest_address',
+  'total_price',
+  'special_notes',
+  'advance_amount',
+  'birthday',
+  'food',
+  // Added in M2 — safe for staff/admin to edit, and PayHere's checkout requires
+  // an email address that the original schema had nowhere to store.
+  'guest_email',
+  'guest_city',
+  'guest_country',
+];
+
+/**
+ * Legacy `status` → the split (booking_status, payment_status) pair.
+ *
+ * The admin app still speaks the old four-value vocabulary. Until it is
+ * migrated, every write through this controller sets all three fields so the
+ * two representations cannot drift.
+ *
+ * Only this direction is derived. The payment layer writes booking_status and
+ * payment_status directly and does NOT go back through here — a verified IPN is
+ * the authority on payment state, not a derived legacy value.
+ */
+const LEGACY_STATUS_MAP = {
+  pending:      { booking_status: 'HOLD',      payment_status: 'UNPAID' },
+  advance_paid: { booking_status: 'CONFIRMED', payment_status: 'PARTIALLY_PAID' },
+  paid:         { booking_status: 'CONFIRMED', payment_status: 'PAID' },
+  cancelled:    { booking_status: 'CANCELLED', payment_status: 'UNPAID' },
+};
+
+/**
+ * Apply the legacy status plus its two derived fields, and keep the cents
+ * columns in step with the float ones the admin app writes.
+ *
+ * @param {object} booking a Booking document or plain object
+ * @param {string} legacyStatus one of the legacy enum values
+ */
+function applyLegacyStatus(booking, legacyStatus) {
+  const mapped = LEGACY_STATUS_MAP[legacyStatus];
+  if (!mapped) return;
+
+  booking.status = legacyStatus;
+  booking.booking_status = mapped.booking_status;
+  booking.payment_status = mapped.payment_status;
+
+  if (legacyStatus === 'cancelled' && !booking.cancelled_at) {
+    booking.cancelled_at = new Date();
+  }
+  if (mapped.booking_status === 'CONFIRMED' && !booking.confirmed_at) {
+    booking.confirmed_at = new Date();
+  }
+}
+
+/**
+ * Mirror the float money columns into integer cents.
+ *
+ * The admin app writes rupees; anything touching PayHere reads cents.
+ *
+ * IMPORTANT — the mirror is asymmetric, and deliberately so:
+ *
+ *   total_amount_cents  is always mirrored. The admin owns the price.
+ *
+ *   paid_amount_cents   is mirrored ONLY while no gateway payment exists.
+ *   deposit_amount_cents
+ *
+ * Once PayHere has successfully taken money, `has_gateway_payment` is set and
+ * the payment layer owns those two fields outright. Without that guard, an
+ * admin editing an unrelated field would recompute paid_amount_cents from the
+ * legacy `advance_amount` float and erase a real online payment — the exact
+ * "payment state must never be settable through the admin path" rule that
+ * BOOKING_UPDATABLE_FIELDS exists to enforce.
+ */
+function syncMoneyToCents(booking) {
+  booking.total_amount_cents = toCents(booking.total_price || 0);
+  if (!booking.currency) booking.currency = 'LKR';
+
+  if (booking.has_gateway_payment) return;   // gateway-owned from here on
+
+  const advanceCents = toCents(booking.advance_amount || 0);
+  booking.paid_amount_cents = advanceCents;
+  booking.deposit_amount_cents = advanceCents;
+}
 
 /**
  * GET /bookings - Fetch bookings with filtering and proper sorting
@@ -139,13 +246,25 @@ const createBooking = async (req, res) => {
       birthday: req.body.birthday || null,
       food: req.body.food || 0,
       status: req.body.status ? req.body.status.toLowerCase() : 'pending',
+      guest_email: req.body.guest_email || null,
+      guest_city: req.body.guest_city || '',
+      guest_country: req.body.guest_country || 'Sri Lanka',
+      // Created through the authenticated admin API, so by definition staff-entered.
+      // The public booking flow (M3) sets source='WEB' on its own path.
+      source: 'ADMIN',
       deleted: false
     });
 
     const booking = new Booking(bookingData);
 
+    // Dual-write: keep the legacy status and the split status fields in step,
+    // and mirror the float amounts into cents. See applyLegacyStatus above.
+    applyLegacyStatus(booking, booking.status);
+    syncMoneyToCents(booking);
+    booking.booking_ref = await generateUniqueBookingRef(Booking);
+
     await booking.save();
-    console.log('✅ Booking saved:', booking._id);
+    console.log('✅ Booking saved:', booking._id, booking.booking_ref);
 
     // Send SMS if status is advance_paid
     if (booking.status === 'advance_paid') {
@@ -202,14 +321,31 @@ const updateBooking = async (req, res) => {
     }
 
     const previousStatus = booking.status;
-    
-    // Prevent clientId modification
-    delete req.body.clientId;
-    
-    Object.assign(booking, {
-      ...req.body,
-      status: req.body.status ? req.body.status.toLowerCase() : booking.status,
-    });
+
+    // Explicit allowlist — see BOOKING_UPDATABLE_FIELDS. Never spread req.body
+    // onto the document: that would let a caller set clientId, payment fields,
+    // or the soft-delete flags directly.
+    for (const field of BOOKING_UPDATABLE_FIELDS) {
+      if (Object.prototype.hasOwnProperty.call(req.body, field)) {
+        booking[field] = req.body[field];
+      }
+    }
+
+    // `status` is handled separately because it needs normalising and has
+    // already been validated against validStatuses above. applyLegacyStatus
+    // also derives booking_status / payment_status so the two representations
+    // cannot drift while the admin app still speaks the legacy vocabulary.
+    if (req.body.status) {
+      applyLegacyStatus(booking, req.body.status.toLowerCase());
+    }
+
+    // Amounts may have changed above; keep the cents columns in step.
+    syncMoneyToCents(booking);
+
+    // Backfill for bookings that pre-date the migration.
+    if (!booking.booking_ref) {
+      booking.booking_ref = await generateUniqueBookingRef(Booking);
+    }
 
     await booking.save();
     console.log('✅ Booking updated:', booking._id);

@@ -64,7 +64,7 @@ router.use(authMiddleware);
  *       500:
  *         description: Internal server error
  */
-router.post("/", expenseController.createExpense);
+router.post("/", staffReadOnly, expenseController.createExpense);
 
 /**
  * @swagger
@@ -215,7 +215,7 @@ router.get("/:id", expenseController.getExpenseById);
  *       500:
  *         description: Internal server error
  */
-router.put("/:id", expenseController.updateExpense);
+router.put("/:id", staffReadOnly, expenseController.updateExpense);
 
 /**
  * @swagger
@@ -243,7 +243,7 @@ router.put("/:id", expenseController.updateExpense);
  *       500:
  *         description: Internal server error
  */
-router.delete("/:id", expenseController.deleteExpense);
+router.delete("/:id", staffReadOnly, expenseController.deleteExpense);
 
 module.exports = router;
 

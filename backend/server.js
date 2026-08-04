@@ -2,6 +2,8 @@
 const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const connectDB = require('./config/db');
 const cron = require('node-cron');
 const Booking = require('./models/booking');
@@ -16,17 +18,60 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ✅ CORS setup: allow all origins, handle preflight
-app.use(cors({
-  origin: "*",
+// Render/proxy aware — needed for correct client IPs in rate limiting and logs.
+app.set('trust proxy', 1);
+
+// ✅ Security headers.
+// contentSecurityPolicy is disabled because this app serves server-rendered
+// HTML (the /invoice/:bookingId page and the root API index) with inline
+// <style>/<script> blocks that a default CSP would break.
+app.use(helmet({ contentSecurityPolicy: false }));
+
+// ✅ CORS: explicit allowlist from CORS_ALLOWED_ORIGINS (comma-separated).
+// Falls back to permissive "*" ONLY when the variable is unset, so that an
+// existing deployment cannot be locked out by deploying this change before the
+// env var is configured. Set CORS_ALLOWED_ORIGINS in every environment.
+const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+if (allowedOrigins.length === 0) {
+  console.warn(
+    '⚠️  CORS_ALLOWED_ORIGINS is not set — falling back to allow-all origins.\n' +
+    '    Set it before going live (e.g. https://mist.zonova.lk,https://zonova.lk).'
+  );
+}
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // No Origin header: same-origin, curl, mobile apps (Android/iOS). Allow.
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.length === 0) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    console.warn(`[CORS] 🚫 Blocked origin: ${origin}`);
+    return callback(null, false);
+  },
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-}));
+  allowedHeaders: ["Content-Type", "Authorization", "Idempotency-Key"],
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
 
 // Handle OPTIONS preflight for all routes
-app.options('*', cors(), (req, res) => {
-  res.sendStatus(200);
-});
+app.options('*', cors(corsOptions));
+
+// ✅ Global rate limit. Deliberately generous — this is an abuse ceiling, not a
+// quota. Tighter per-route limiters belong on the public booking and payment
+// endpoints when those are added.
+app.use(rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 1000,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many requests, please try again later.' },
+}));
 
 // ✅ Body parser
 app.use(express.json({ limit: '50mb' }));
@@ -34,6 +79,14 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // ✅ Serve static files (uploads folder)
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// ✅ Public (unauthenticated) guest booking routes.
+//
+// Mounted before the authenticated routes and deliberately NOT behind
+// authMiddleware. Each route carries its own rate limiter and a 10kb body cap
+// (see routes/publicRoutes.js) rather than inheriting the 50mb global limit
+// that exists for authenticated media uploads.
+app.use('/api/v1/public', require('./routes/publicRoutes'));
 
 // ✅ Routes
 app.use('/api/auth', require('./routes/authRoutes'));

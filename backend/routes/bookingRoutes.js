@@ -88,7 +88,7 @@ router.get('/eligible-for-discount', bookingController.getEligibleForDiscount);
  *       500:
  *         description: Internal server error
  */
-router.post('/send-discount-sms-test', bookingController.sendDiscountSmsTest);
+router.post('/send-discount-sms-test', staffReadOnly, bookingController.sendDiscountSmsTest);
 
 /**
  * @swagger
@@ -151,7 +151,7 @@ router.get('/', bookingController.getAllBookings);
  *       500:
  *         description: Internal server error
  */
-router.post('/', bookingController.createBooking);
+router.post('/', staffReadOnly, bookingController.createBooking);
 
 /**
  * @swagger
@@ -201,7 +201,7 @@ router.post('/', bookingController.createBooking);
  *       500:
  *         description: Internal server error
  */
-router.patch('/:id', bookingController.updateBooking);
+router.patch('/:id', staffReadOnly, bookingController.updateBooking);
 
 /**
  * @swagger
@@ -229,7 +229,7 @@ router.patch('/:id', bookingController.updateBooking);
  *       500:
  *         description: Internal server error
  */
-router.delete('/:id', bookingController.deleteBooking);
+router.delete('/:id', staffReadOnly, bookingController.deleteBooking);
 
 /**
  * @swagger
@@ -257,7 +257,7 @@ router.delete('/:id', bookingController.deleteBooking);
  *       500:
  *         description: Internal server error
  */
-router.post('/:id/restore', bookingController.restoreBooking);
+router.post('/:id/restore', staffReadOnly, bookingController.restoreBooking);
 
 /**
  * @swagger
@@ -285,7 +285,7 @@ router.post('/:id/restore', bookingController.restoreBooking);
  *       500:
  *         description: Internal server error
  */
-router.delete('/:id/permanent', bookingController.permanentDeleteBooking);
+router.delete('/:id/permanent', staffReadOnly, bookingController.permanentDeleteBooking);
 
 /**
  * @swagger
@@ -326,7 +326,7 @@ router.delete('/:id/permanent', bookingController.permanentDeleteBooking);
  *       500:
  *         description: Internal server error
  */
-router.post('/:id/recordings', upload.single('audio'), bookingController.uploadRecording);
+router.post('/:id/recordings', staffReadOnly, upload.single('audio'), bookingController.uploadRecording);
 
 /**
  * @swagger
@@ -360,7 +360,7 @@ router.post('/:id/recordings', upload.single('audio'), bookingController.uploadR
  *       500:
  *         description: Internal server error
  */
-router.delete('/:id/recordings/:recordingId', bookingController.deleteRecording);
+router.delete('/:id/recordings/:recordingId', staffReadOnly, bookingController.deleteRecording);
 
 /**
  * @swagger

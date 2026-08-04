@@ -252,7 +252,7 @@ router.get('/:id', getTodoById);
  *       500:
  *         description: Internal server error
  */
-router.post('/', createTodo);
+router.post('/', staffReadOnly, createTodo);
 
 /**
  * @swagger
@@ -306,7 +306,7 @@ router.post('/', createTodo);
  *       500:
  *         description: Internal server error
  */
-router.put('/:id', updateTodo);
+router.put('/:id', staffReadOnly, updateTodo);
 
 /**
  * @swagger
@@ -362,6 +362,13 @@ router.put('/:id', updateTodo);
  *       500:
  *         description: Internal server error
  */
+// NOTE: intentionally NOT wrapped in staffReadOnly. Completing an assigned task
+// (with proof images) is the core STAFF workflow — see my_todos_view.dart — so
+// staff must be able to POST here.
+// KNOWN GAP: completeTodo currently scopes only by tenant, not by assignee, so
+// any user in the tenant can complete any todo. Deliberately left as-is for now
+// (managers may legitimately complete on a staff member's behalf); tighten to an
+// "assignee or manager/admin" check if that turns out not to be wanted.
 router.post('/:id/complete', upload.array('images', 10), completeTodo);
 
 /**
@@ -414,7 +421,7 @@ router.post('/:id/complete', upload.array('images', 10), completeTodo);
  *       500:
  *         description: Internal server error
  */
-router.patch('/:id/approve', approveTodo);
+router.patch('/:id/approve', staffReadOnly, approveTodo);
 
 /**
  * @swagger
@@ -469,7 +476,7 @@ router.patch('/:id/approve', approveTodo);
  *       500:
  *         description: Internal server error
  */
-router.patch('/:id/reject', rejectTodo);
+router.patch('/:id/reject', staffReadOnly, rejectTodo);
 
 /**
  * @swagger
@@ -499,7 +506,7 @@ router.patch('/:id/reject', rejectTodo);
  *       500:
  *         description: Internal server error
  */
-router.delete('/:id', deleteTodo);
+router.delete('/:id', staffReadOnly, deleteTodo);
 
 /**
  * @swagger
